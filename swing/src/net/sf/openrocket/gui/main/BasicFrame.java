@@ -2,6 +2,7 @@ package net.sf.openrocket.gui.main;
 
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.TextArea;
 import java.awt.Toolkit;
 import java.awt.Window;
 import java.awt.event.ActionEvent;
@@ -65,6 +66,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.miginfocom.swing.MigLayout;
+import net.sf.openrocket.aerodynamics.AerodynamicCalculator;
+import net.sf.openrocket.aerodynamics.BarrowmanCalculator;
+import net.sf.openrocket.aerodynamics.FlightConditions;
 import net.sf.openrocket.aerodynamics.WarningSet;
 import net.sf.openrocket.document.OpenRocketDocument;
 import net.sf.openrocket.document.OpenRocketDocumentFactory;
@@ -102,11 +106,13 @@ import net.sf.openrocket.l10n.Translator;
 import net.sf.openrocket.logging.Markers;
 import net.sf.openrocket.rocketcomponent.ComponentChangeEvent;
 import net.sf.openrocket.rocketcomponent.ComponentChangeListener;
+import net.sf.openrocket.rocketcomponent.FlightConfiguration;
 import net.sf.openrocket.rocketcomponent.Rocket;
 import net.sf.openrocket.rocketcomponent.RocketComponent;
 import net.sf.openrocket.startup.Application;
 import net.sf.openrocket.startup.Preferences;
 import net.sf.openrocket.util.BugException;
+import net.sf.openrocket.util.Coordinate;
 import net.sf.openrocket.util.MemoryManagement;
 import net.sf.openrocket.util.MemoryManagement.MemoryData;
 import net.sf.openrocket.util.Reflection;
@@ -208,6 +214,8 @@ public class BasicFrame extends JFrame {
 		tabbedPane.addTab(trans.get("BasicFrame.tab.Flightconfig"), null, new FlightConfigurationPanel(document));
 		//// Flight simulations
 		tabbedPane.addTab(trans.get("BasicFrame.tab.Flightsim"), null, simulationPanel);
+		//// Nakuja  
+		tabbedPane.addTab("Nakuja", null, NakujaTab());
 
 		// Add change listener to catch when the tabs are changed.  This is to run simulations 
 		// automagically when the simulation tab is selected.
@@ -277,6 +285,36 @@ public class BasicFrame extends JFrame {
 			}
 		}
 		log.debug("BasicFrame instantiation complete");
+	}
+
+
+	private JComponent NakujaTab() {
+		JSplitPane horizontal = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, true);
+		horizontal.setResizeWeight(0.5);
+		JPanel panel = new JPanel(new MigLayout("fill, flowy", "[grow][grow 0]","[grow]"));
+		
+		TextArea textArea = new TextArea();
+		textArea.setRows(10);
+		textArea.setColumns(40);
+		String s = new String();
+		
+		FlightConfiguration curConfig = document.getSelectedConfiguration();
+		FlightConditions conditions = new FlightConditions(curConfig);
+		WarningSet warnings = new WarningSet();
+		AerodynamicCalculator aerodynamicCalculator; 
+		aerodynamicCalculator = new BarrowmanCalculator();
+
+		Coordinate cp = aerodynamicCalculator.getCP(curConfig, conditions, warnings);
+		
+		s += cp.toString();
+
+		textArea.setText(s);
+
+		panel.add(textArea, "grow");
+
+		horizontal.setRightComponent(panel);
+
+		return horizontal;
 	}
 
 	/**
