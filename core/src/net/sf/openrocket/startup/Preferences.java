@@ -40,6 +40,7 @@ public abstract class Preferences implements ChangeSource {
 	 * There are other strings out there in the source as well.
 	 */
 	public static final String BODY_COMPONENT_INSERT_POSITION_KEY = "BodyComponentInsertPosition";
+	public static final String STAGE_INSERT_POSITION_KEY = "StageInsertPosition";
 	public static final String USER_THRUST_CURVES_KEY = "UserThrustCurves";
 	
 	public static final String DEFAULT_MACH_NUMBER = "DefaultMachNumber";
@@ -54,7 +55,6 @@ public abstract class Preferences implements ChangeSource {
 	public static final String PLOT_SHOW_POINTS = "ShowPlotPoints";
 	
 	private static final String CHECK_UPDATES = "CheckUpdates";
-	public static final String LAST_UPDATE = "LastUpdateVersion";
 	
 	public static final String MOTOR_DIAMETER_FILTER = "MotorDiameterMatch";
 	public static final String MOTOR_HIDE_SIMILAR = "MotorHideSimilar";
@@ -82,7 +82,7 @@ public abstract class Preferences implements ChangeSource {
 	public static final String LAUNCH_ROD_DIRECTION = "LaunchRodDirection";
 	public static final String WIND_DIRECTION = "WindDirection";
 	public static final String WIND_AVERAGE = "WindAverage";
-	public static final String WIND_TURBULANCE = "WindTurbulence";
+	public static final String WIND_TURBULENCE = "WindTurbulence";
 	public static final String LAUNCH_ALTITUDE = "LaunchAltitude";
 	public static final String LAUNCH_LATITUDE = "LaunchLatitude";
 	public static final String LAUNCH_LONGITUDE = "LaunchLongitude";
@@ -187,15 +187,15 @@ public abstract class Preferences implements ChangeSource {
 	}
 	
 	public final double getWindTurbulenceIntensity() {
-		return Application.getPreferences().getChoice(Preferences.WIND_TURBULANCE, 0.9, 0.1);
+		return Application.getPreferences().getChoice(Preferences.WIND_TURBULENCE, 0.9, 0.1);
 	}
 	
 	public final void setWindTurbulenceIntensity(double wti) {
-		double oldWTI = Application.getPreferences().getChoice(Preferences.WIND_TURBULANCE, 0.9, 0.3);
+		double oldWTI = Application.getPreferences().getChoice(Preferences.WIND_TURBULENCE, 0.9, 0.3);
 		
 		if (MathUtil.equals(oldWTI, wti))
 			return;
-		this.putDouble(Preferences.WIND_TURBULANCE, wti);
+		this.putDouble(Preferences.WIND_TURBULENCE, wti);
 		fireChangeEvent();
 	}
 	
@@ -220,7 +220,6 @@ public abstract class Preferences implements ChangeSource {
 		if (MathUtil.equals(this.getDouble(LAUNCH_ROD_ANGLE, 0), launchRodAngle))
 			return;
 		this.putDouble(LAUNCH_ROD_ANGLE, launchRodAngle);
-		;
 		fireChangeEvent();
 	}
 	
@@ -255,7 +254,7 @@ public abstract class Preferences implements ChangeSource {
 	
 	
 	public double getWindSpeedDeviation() {
-		return this.getDouble(WIND_AVERAGE, 2) * this.getDouble(WIND_TURBULANCE, .1);
+		return this.getDouble(WIND_AVERAGE, 2) * this.getDouble(WIND_TURBULENCE, .1);
 	}
 	
 	public void setWindSpeedDeviation(double windDeviation) {
@@ -767,7 +766,7 @@ public abstract class Preferences implements ChangeSource {
 		}
 	}
 	
-	private List<EventListener> listeners = new ArrayList<EventListener>();
+	private final List<EventListener> listeners = new ArrayList<EventListener>();
 	private final EventObject event = new EventObject(this);
 	
 	@Override

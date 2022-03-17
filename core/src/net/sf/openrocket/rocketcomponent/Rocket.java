@@ -387,6 +387,7 @@ public class Rocket extends ComponentAssembly {
 		this.functionalModID = r.functionalModID;
 		this.refType = r.refType;
 		this.customReferenceLength = r.customReferenceLength;
+		this.stageMap = r.stageMap;		
 
 		// these flight configurations need to reference the _this_ Rocket:
 		this.configSet.setDefault(new FlightConfiguration(this));
@@ -496,10 +497,24 @@ public class Rocket extends ComponentAssembly {
 	
 	@Override
 	public void update(){
+		updateStageNumbers();
 		updateStageMap();
 		updateConfigurations();
 	}
-	
+
+	/**
+	 * Update all the stage numbers based on their position in the component tree
+	 */
+	private void updateStageNumbers() {
+		for (RocketComponent component : getChildren()) {
+			if (component instanceof AxialStage) {
+				AxialStage stage = (AxialStage) component;
+				forgetStage(stage);
+				stage.setStageNumber(getChildPosition(stage));
+			}
+		}
+	}
+
 	private void updateStageMap(){
 		for( RocketComponent component : getChildren() ){
 			if (component instanceof AxialStage) {
@@ -846,7 +861,7 @@ public class Rocket extends ComponentAssembly {
 			if( this.selectedConfiguration.equals( config)){
 				shortKey = "=>" + shortKey;
 			}
-			buf.append(String.format(fmt, shortKey, config.getName() ));
+			buf.append(String.format(fmt, shortKey, config.getNameRaw() ));
 		}
 		return buf.toString();
 	}

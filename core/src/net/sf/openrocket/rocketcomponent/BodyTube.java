@@ -1,7 +1,5 @@
 package net.sf.openrocket.rocketcomponent;
 
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Iterator;
 
 import net.sf.openrocket.l10n.Translator;
@@ -10,10 +8,7 @@ import net.sf.openrocket.motor.MotorConfiguration;
 import net.sf.openrocket.motor.MotorConfigurationSet;
 import net.sf.openrocket.preset.ComponentPreset;
 import net.sf.openrocket.startup.Application;
-import net.sf.openrocket.util.BoundingBox;
-import net.sf.openrocket.util.BugException;
-import net.sf.openrocket.util.Coordinate;
-import net.sf.openrocket.util.MathUtil;
+import net.sf.openrocket.util.*;
 
 
 /**
@@ -22,17 +17,21 @@ import net.sf.openrocket.util.MathUtil;
  * @author Sampo Niskanen <sampo.niskanen@iki.fi>
  */
 
-public class BodyTube extends SymmetricComponent implements BoxBounded, MotorMount, Coaxial {
+public class BodyTube extends SymmetricComponent implements BoxBounded, MotorMount, Coaxial, InsideColorComponent {
 	private static final Translator trans = Application.getTranslator();
 	
 	private double outerRadius = 0;
 	private boolean autoRadius = false; // Radius chosen automatically based on parent component
+
+	private SymmetricComponent refComp = null;	// Reference component that is used for the autoRadius
 	
 	// When changing the inner radius, thickness is modified
 	private double overhang = 0;
 	private boolean isActingMount = false;
 	
 	private MotorConfigurationSet motors;
+
+	private final InsideColorComponentHandler insideColorComponentHandler = new InsideColorComponentHandler(this);
 	
 	public BodyTube() {
 		this(8 * DEFAULT_RADIUS, DEFAULT_RADIUS);
@@ -45,6 +44,8 @@ public class BodyTube extends SymmetricComponent implements BoxBounded, MotorMou
 		this.outerRadius = Math.max(radius, 0);
 		this.length = Math.max(length, 0);
 		motors = new MotorConfigurationSet(this);
+		super.displayOrder_side = 0;		// Order for displaying the component in the 2D side view
+		super.displayOrder_back = 1;		// Order for displaying the component in the 2D back view
 	}
 	
 	public BodyTube(double length, double radius, boolean filled) {
@@ -77,19 +78,31 @@ public class BodyTube extends SymmetricComponent implements BoxBounded, MotorMou
 			// Return auto radius from front or rear
 			double r = -1;
 			SymmetricComponent c = this.getPreviousSymmetricComponent();
-			if (c != null) {
+			// Don't use the radius of a component who already has its auto diameter enabled
+			if (c != null && !c.usesNextCompAutomatic()) {
 				r = c.getFrontAutoRadius();
+				refComp = c;
 			}
 			if (r < 0) {
 				c = this.getNextSymmetricComponent();
-				if (c != null) {
+				// Don't use the radius of a component who already has its auto diameter enabled
+				if (c != null && !c.usesPreviousCompAutomatic()) {
 					r = c.getRearAutoRadius();
+					refComp = c;
 				}
 			}
 			if (r < 0)
 				r = DEFAULT_RADIUS;
 			return r;
 		}
+		return outerRadius;
+	}
+
+	/**
+	 * Return the outer radius that was manually entered, so not the value that the component received from automatic
+	 * outer radius.
+	 */
+	public double getOuterRadiusNoAutomatic() {
 		return outerRadius;
 	}
 	
@@ -102,6 +115,12 @@ public class BodyTube extends SymmetricComponent implements BoxBounded, MotorMou
 	 */
 	@Override
 	public void setOuterRadius(double radius) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof BodyTube) {
+				((BodyTube) listener).setOuterRadius(radius);
+			}
+		}
+
 		if ((this.outerRadius == radius) && (autoRadius == false))
 			return;
 		
@@ -127,6 +146,12 @@ public class BodyTube extends SymmetricComponent implements BoxBounded, MotorMou
 	 * Sets whether the radius is selected automatically or not.
 	 */
 	public void setOuterRadiusAutomatic(boolean auto) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof BodyTube) {
+				((BodyTube) listener).setOuterRadiusAutomatic(auto);
+			}
+		}
+
 		if (autoRadius == auto)
 			return;
 		
@@ -134,8 +159,17 @@ public class BodyTube extends SymmetricComponent implements BoxBounded, MotorMou
 		fireComponentChangeEvent(ComponentChangeEvent.BOTH_CHANGE);
 		clearPreset();
 	}
-	
-	
+
+	@Override
+	public boolean usesPreviousCompAutomatic() {
+		return isOuterRadiusAutomatic() && refComp == getPreviousSymmetricComponent();
+	}
+
+	@Override
+	public boolean usesNextCompAutomatic() {
+		return isOuterRadiusAutomatic() && refComp == getNextSymmetricComponent();
+	}
+
 	@Override
 	protected void loadFromPreset(ComponentPreset preset) {
 		this.autoRadius = false;
@@ -216,6 +250,12 @@ public class BodyTube extends SymmetricComponent implements BoxBounded, MotorMou
 	
 	@Override
 	public void setInnerRadius(double r) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof BodyTube) {
+				((BodyTube) listener).setInnerRadius(r);
+			}
+		}
+
 		setThickness(getOuterRadius() - r);
 	}
 	
@@ -350,7 +390,17 @@ public class BodyTube extends SymmetricComponent implements BoxBounded, MotorMou
 	}
 
 	@Override 
-	public void setMotorConfig( final MotorConfiguration newMotorConfig, final FlightConfigurationId fcid){
+	public void setMotorConfig(MotorConfiguration newMotorConfig, FlightConfigurationId fcid){
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof BodyTube) {
+				if (newMotorConfig != null) {
+					BodyTube tube = (BodyTube) listener;
+					MotorConfiguration config = tube.getMotorConfig(fcid);
+					config.copyFrom(newMotorConfig);
+				}
+			}
+		}
+
 		if(null == newMotorConfig){
 			this.motors.set( fcid, null);
 		}else{
@@ -362,9 +412,6 @@ public class BodyTube extends SymmetricComponent implements BoxBounded, MotorMou
 		}		
 
 		this.isActingMount=true;
-		
-		// this is done automatically in the motorSet
-		//fireComponentChangeEvent(ComponentChangeEvent.MOTOR_CHANGE);
 	}
 	
 	
@@ -385,6 +432,12 @@ public class BodyTube extends SymmetricComponent implements BoxBounded, MotorMou
 	
 	@Override
     public void setMotorMount(boolean _active){
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof BodyTube) {
+				((BodyTube) listener).setMotorMount(_active);
+			}
+		}
+
     	if (this.isActingMount == _active)
     		return;
     	this.isActingMount = _active;
@@ -421,6 +474,12 @@ public class BodyTube extends SymmetricComponent implements BoxBounded, MotorMou
 	
 	@Override
 	public void setMotorOverhang(double overhang) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof BodyTube) {
+				((BodyTube) listener).setMotorOverhang(overhang);
+			}
+		}
+
 		if (MathUtil.equals(this.overhang, overhang))
 			return;
 		this.overhang = overhang;
@@ -454,5 +513,37 @@ public class BodyTube extends SymmetricComponent implements BoxBounded, MotorMou
 	@Override
 	public ClusterConfiguration getClusterConfiguration() {
 		return ClusterConfiguration.SINGLE;
+	}
+
+
+	@Override
+	public InsideColorComponentHandler getInsideColorComponentHandler() {
+		return this.insideColorComponentHandler;
+	}
+
+	@Override
+	public boolean addConfigListener(RocketComponent listener) {
+		boolean success = super.addConfigListener(listener);
+		if (listener instanceof BodyTube) {
+			MotorConfiguration config = ((BodyTube) listener).getDefaultMotorConfig();
+			success = success && getDefaultMotorConfig().addConfigListener(config);
+			return success;
+		}
+		return false;
+	}
+
+	@Override
+	public void removeConfigListener(RocketComponent listener) {
+		super.removeConfigListener(listener);
+		if (listener instanceof BodyTube) {
+			MotorConfiguration config = ((BodyTube) listener).getDefaultMotorConfig();
+			getDefaultMotorConfig().removeConfigListener(config);
+		}
+	}
+
+	@Override
+	public void clearConfigListeners() {
+		super.clearConfigListeners();
+		getDefaultMotorConfig().clearConfigListeners();
 	}
 }

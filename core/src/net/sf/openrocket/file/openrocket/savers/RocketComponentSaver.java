@@ -15,14 +15,7 @@ import net.sf.openrocket.motor.Motor;
 import net.sf.openrocket.motor.MotorConfiguration;
 import net.sf.openrocket.motor.ThrustCurveMotor;
 import net.sf.openrocket.preset.ComponentPreset;
-import net.sf.openrocket.rocketcomponent.Clusterable;
-import net.sf.openrocket.rocketcomponent.ComponentAssembly;
-import net.sf.openrocket.rocketcomponent.FlightConfigurationId;
-import net.sf.openrocket.rocketcomponent.Instanceable;
-import net.sf.openrocket.rocketcomponent.LineInstanceable;
-import net.sf.openrocket.rocketcomponent.MotorMount;
-import net.sf.openrocket.rocketcomponent.Rocket;
-import net.sf.openrocket.rocketcomponent.RocketComponent;
+import net.sf.openrocket.rocketcomponent.*;
 import net.sf.openrocket.rocketcomponent.position.AnglePositionable;
 import net.sf.openrocket.rocketcomponent.position.AxialMethod;
 import net.sf.openrocket.rocketcomponent.position.RadiusPositionable;
@@ -49,28 +42,26 @@ public class RocketComponentSaver {
 					"\" manufacturer=\"" + preset.getManufacturer().getSimpleName() +
 					"\" partno=\"" + preset.getPartNo() + "\" digest=\"" + preset.getDigest() + "\"/>");
 		}
-		
+
+		// Save outside appearance
 		Appearance ap = c.getAppearance();
 		if (ap != null) {
 			elements.add("<appearance>");
-			Color paint = ap.getPaint();
-			emitColor("paint", elements, paint);
-			elements.add("<shine>" + ap.getShine() + "</shine>");
-			Decal decal = ap.getTexture();
-			if (decal != null) {
-				String name = decal.getImage().getName();
-				double rotation = decal.getRotation();
-				EdgeMode edgeMode = decal.getEdgeMode();
-				elements.add("<decal name=\"" + TextUtil.escapeXML(name) + "\" rotation=\"" + rotation + "\" edgemode=\"" + edgeMode.name() + "\">");
-				Coordinate center = decal.getCenter();
-				elements.add("<center x=\"" + center.x + "\" y=\"" + center.y + "\"/>");
-				Coordinate offset = decal.getOffset();
-				elements.add("<offset x=\"" + offset.x + "\" y=\"" + offset.y + "\"/>");
-				Coordinate scale = decal.getScale();
-				elements.add("<scale x=\"" + scale.x + "\" y=\"" + scale.y + "\"/>");
-				elements.add("</decal>");
-			}
+			buildAppearanceElements(elements, ap);
 			elements.add("</appearance>");
+		}
+
+		// Save inside appearance
+		if (c instanceof InsideColorComponent) {
+			InsideColorComponentHandler handler = ((InsideColorComponent)c).getInsideColorComponentHandler();
+			Appearance ap_in = handler.getInsideAppearance();
+			if (ap_in != null) {
+				elements.add("<inside-appearance>");
+				elements.add("<edgesSameAsInside>" + handler.isEdgesSameAsInside() + "</edgesSameAsInside>");
+				elements.add("<insideSameAsOutside>" + handler.isSeparateInsideOutside() + "</insideSameAsOutside>");
+				buildAppearanceElements(elements, ap_in);
+				elements.add("</inside-appearance>");
+			}
 		}
 		
 		// Save color and line style if significant
@@ -89,9 +80,13 @@ public class RocketComponentSaver {
 			int instanceCount = c.getInstanceCount();
 			
 			if (c instanceof Clusterable) {
-				; // no-op.  Instance counts are set via named cluster configurations
+				// no-op.  Instance counts are set via named cluster configurations
 			} else {
 				emitInteger(elements, "instancecount", c.getInstanceCount());
+				// TODO: delete this when no backward compatibility with OR 15.03 is needed anymore
+				if (c instanceof FinSet || c instanceof TubeFinSet) {
+					emitInteger(elements, "fincount", c.getInstanceCount());
+				}
 			}
 			
 			if (c instanceof LineInstanceable) {
@@ -112,6 +107,15 @@ public class RocketComponentSaver {
 			final String angleMethod = anglePos.getAngleMethod().name().toLowerCase(Locale.ENGLISH);
 			final double angleOffset = anglePos.getAngleOffset()*180.0/Math.PI;
 			elements.add("<angleoffset method=\"" + angleMethod + "\">" + angleOffset + "</angleoffset>");
+			// TODO: delete this when no backward compatibility with OR 15.03 is needed anymore
+			if (c instanceof FinSet || c instanceof TubeFinSet) {
+				elements.add("<rotation>" + angleOffset + "</rotation>");
+			}
+			else if (!(c instanceof ParallelStage) &&
+					 !(c instanceof PodSet) &&					 
+					 !(c instanceof RailButton)) {
+				elements.add("<radialdirection>" + angleOffset + "</radialdirection>");
+			}
 		}
 		
 		// Save position unless "AFTER"
@@ -119,6 +123,8 @@ public class RocketComponentSaver {
 			// The type names are currently equivalent to the enum names except for case.
 			String axialMethod = c.getAxialMethod().name().toLowerCase(Locale.ENGLISH);
 			elements.add("<axialoffset method=\"" + axialMethod + "\">" + c.getAxialOffset() + "</axialoffset>");
+			// TODO: delete this when no backward compatibility with OR 15.03 is needed anymore
+			elements.add("<position type=\"" + axialMethod + "\">" + c.getAxialOffset() + "</position>");
 		}
 		
 		// Overrides
@@ -147,10 +153,27 @@ public class RocketComponentSaver {
 		}
 		
 	}
-	
-	
-	
-	
+
+	private void buildAppearanceElements(List<String> elements, Appearance a) {
+		Color paint = a.getPaint();
+		emitColor("paint", elements, paint);
+		elements.add("<shine>" + a.getShine() + "</shine>");
+		Decal decal = a.getTexture();
+		if (decal != null) {
+			String name = decal.getImage().getName();
+			double rotation = decal.getRotation();
+			EdgeMode edgeMode = decal.getEdgeMode();
+			elements.add("<decal name=\"" + TextUtil.escapeXML(name) + "\" rotation=\"" + rotation + "\" edgemode=\"" + edgeMode.name() + "\">");
+			Coordinate center = decal.getCenter();
+			elements.add("<center x=\"" + center.x + "\" y=\"" + center.y + "\"/>");
+			Coordinate offset = decal.getOffset();
+			elements.add("<offset x=\"" + offset.x + "\" y=\"" + offset.y + "\"/>");
+			Coordinate scale = decal.getScale();
+			elements.add("<scale x=\"" + scale.x + "\" y=\"" + scale.y + "\"/>");
+			elements.add("</decal>");
+		}
+	}
+
 	protected final String materialParam(Material mat) {
 		return materialParam("material", mat);
 	}

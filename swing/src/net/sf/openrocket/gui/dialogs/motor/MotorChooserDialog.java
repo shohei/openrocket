@@ -6,6 +6,8 @@ import java.awt.Window;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 
+import javax.swing.AbstractAction;
+import javax.swing.Action;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
@@ -20,6 +22,7 @@ import net.sf.openrocket.motor.Motor;
 import net.sf.openrocket.rocketcomponent.FlightConfigurationId;
 import net.sf.openrocket.rocketcomponent.MotorMount;
 import net.sf.openrocket.startup.Application;
+import net.sf.openrocket.gui.widgets.SelectColorButton;
 
 @SuppressWarnings("serial")
 public class MotorChooserDialog extends JDialog implements CloseableDialog {
@@ -48,7 +51,7 @@ public class MotorChooserDialog extends JDialog implements CloseableDialog {
 		
 		
 		// OK / Cancel buttons
-		JButton okButton = new JButton(trans.get("dlg.but.ok"));
+		JButton okButton = new SelectColorButton(trans.get("dlg.but.ok"));
 		okButton.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
@@ -58,7 +61,7 @@ public class MotorChooserDialog extends JDialog implements CloseableDialog {
 		panel.add(okButton, "tag ok, spanx, split");
 		
 		//// Cancel button
-		JButton cancelButton = new JButton(trans.get("dlg.but.cancel"));
+		JButton cancelButton = new SelectColorButton(trans.get("dlg.but.cancel"));
 		cancelButton.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
@@ -72,7 +75,13 @@ public class MotorChooserDialog extends JDialog implements CloseableDialog {
 		this.setModal(true);
 		this.pack();
 		this.setLocationByPlatform(true);
-		GUIUtil.installEscapeCloseOperation(this);
+		Action closeAction = new AbstractAction() {
+			@Override
+			public void actionPerformed(ActionEvent event) {
+				close(false);
+			}
+		};
+		GUIUtil.installEscapeCloseOperation(this, closeAction);
 		
 		JComponent focus = selectionPanel.getDefaultFocus();
 		if (focus != null) {
@@ -106,9 +115,13 @@ public class MotorChooserDialog extends JDialog implements CloseableDialog {
 	public double getSelectedDelay() {
 		return selectionPanel.getSelectedDelay();
 	}
-	
-	
-	
+
+	public void open() {
+		// Update the motor selection based on the motor table value that was already selected in a previous session.
+		selectionPanel.selectMotorFromTable();
+		setVisible(true);
+	}
+
 	@Override
 	public void close(boolean ok) {
 		okClicked = ok;

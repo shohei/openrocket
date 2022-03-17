@@ -61,7 +61,11 @@ import javax.swing.tree.DefaultTreeSelectionModel;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 
+import net.sf.openrocket.appearance.DecalImage;
+import net.sf.openrocket.gui.dialogs.DecalNotFoundDialog;
+import net.sf.openrocket.gui.widgets.SelectColorButton;
 import net.sf.openrocket.rocketcomponent.AxialStage;
+import net.sf.openrocket.util.DecalNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -183,7 +187,7 @@ public class BasicFrame extends JFrame {
 
 		// Create the component tree selection model that will be used
 		componentSelectionModel = new DefaultTreeSelectionModel();
-		componentSelectionModel.setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
+		componentSelectionModel.setSelectionMode(TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION);
 
 		// Obtain the simulation selection model that will be used
 		simulationPanel = new SimulationPanel(document);
@@ -211,7 +215,7 @@ public class BasicFrame extends JFrame {
 		//// Rocket design
 		tabbedPane.addTab(trans.get("BasicFrame.tab.Rocketdesign"), null, designTab());
 		//// Flight configurations
-		tabbedPane.addTab(trans.get("BasicFrame.tab.Flightconfig"), null, new FlightConfigurationPanel(document));
+		tabbedPane.addTab(trans.get("BasicFrame.tab.Flightconfig"), null, new FlightConfigurationPanel(this, document));
 		//// Flight simulations
 		tabbedPane.addTab(trans.get("BasicFrame.tab.Flightsim"), null, simulationPanel);
 		//// Nakuja  
@@ -228,7 +232,7 @@ public class BasicFrame extends JFrame {
 
 		//  Bottom segment, rocket figure
 
-		rocketpanel = new RocketPanel(document);
+		rocketpanel = new RocketPanel(document, this);
 		vertical.setBottomComponent(rocketpanel);
 
 		rocketpanel.setSelectionModel(tree.getSelectionModel());
@@ -369,16 +373,26 @@ public class BasicFrame extends JFrame {
 			@Override
 			public void valueChanged(TreeSelectionEvent e) {
 				// Scroll tree to the selected item
-				TreePath path = componentSelectionModel.getSelectionPath();
-				if (path == null)
+				TreePath[] paths = componentSelectionModel.getSelectionPaths();
+				if (paths == null || paths.length == 0)
 					return;
-				tree.scrollPathToVisible(path);
+
+				for (TreePath path : paths) {
+					tree.scrollPathToVisible(path);
+				}
 
 				if (!ComponentConfigDialog.isDialogVisible())
 					return;
-				RocketComponent c = (RocketComponent) path.getLastPathComponent();
+				RocketComponent c = (RocketComponent) paths[0].getLastPathComponent();
+				List<RocketComponent> listeners = new ArrayList<>();
+				for (int i = 1; i < paths.length; i++) {
+					RocketComponent listener = (RocketComponent) paths[i].getLastPathComponent();
+					if (listener.getClass().equals(c.getClass())) {
+						listeners.add((RocketComponent) paths[i].getLastPathComponent());
+					}
+				}
 				ComponentConfigDialog.showDialog(BasicFrame.this,
-						BasicFrame.this.document, c);
+						BasicFrame.this.document, c, listeners);
 			}
 		});
 
@@ -388,16 +402,16 @@ public class BasicFrame extends JFrame {
 
 
 		// Buttons
-		JButton button = new JButton(actions.getMoveUpAction());
+		JButton button = new SelectColorButton(actions.getMoveUpAction());
 		panel.add(button, "sizegroup buttons, aligny 65%");
 
-		button = new JButton(actions.getMoveDownAction());
+		button = new SelectColorButton(actions.getMoveDownAction());
 		panel.add(button, "sizegroup buttons, aligny 0%");
 
-		button = new JButton(actions.getEditAction());
+		button = new SelectColorButton(actions.getEditAction());
 		panel.add(button, "sizegroup buttons");
 
-		button = new JButton(actions.getDeleteAction());
+		button = new SelectColorButton(actions.getDeleteAction());
 		button.setIcon(null);
 		button.setMnemonic(0);
 		panel.add(button, "sizegroup buttons");
@@ -439,6 +453,24 @@ public class BasicFrame extends JFrame {
 		tree.scrollPathToVisible(path);
 
 		return (RocketComponent) path.getLastPathComponent();
+	}
+
+	/**
+	 * Return the currently selected rocket component, or <code>null</code> if none selected.
+	 */
+	private List<RocketComponent> getSelectedComponents() {
+		TreePath[] paths = componentSelectionModel.getSelectionPaths();
+		if (paths == null || paths.length == 0)
+			return null;
+
+		List<RocketComponent> result = new LinkedList<>();
+		for (TreePath path : paths) {
+			tree.scrollPathToVisible(path);
+			RocketComponent component = (RocketComponent) path.getLastPathComponent();
+			result.add(component);
+		}
+
+		return result;
 	}
 
 
@@ -685,7 +717,7 @@ public class BasicFrame extends JFrame {
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				log.info(Markers.USER_MARKER, "Scale... selected");
-				ScaleDialog dialog = new ScaleDialog(document, getSelectedComponent(), BasicFrame.this);
+				ScaleDialog dialog = new ScaleDialog(document, getSelectedComponents(), BasicFrame.this);
 				dialog.setVisible(true);
 				dialog.dispose();
 			}
@@ -753,7 +785,11 @@ public class BasicFrame extends JFrame {
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				log.info(Markers.USER_MARKER, "Rocket optimization selected");
-				new GeneralOptimizationDialog(document, BasicFrame.this).setVisible(true);
+				try {
+					new GeneralOptimizationDialog(document, BasicFrame.this).setVisible(true);
+				} catch (InterruptedException ex) {
+					log.warn(ex.getMessage());
+				}
 			}
 		});
 		menu.add(item);
@@ -1136,6 +1172,9 @@ public class BasicFrame extends JFrame {
 		tabbedPane.setSelectedIndex(tab);
 	}
 
+	public int getSelectedTab() {
+		return tabbedPane.getSelectedIndex();
+	}
 
 
 	private void openAction() {
@@ -1407,7 +1446,7 @@ public class BasicFrame extends JFrame {
 
 		((SwingPreferences) Application.getPreferences()).setDefaultDirectory(chooser.getCurrentDirectory());
 
-		file = FileHelper.forceExtension(file, "ork");
+		file = FileHelper.forceExtension(file, "rkt");
 		if (FileHelper.confirmWrite(file, this) ) {
 			return saveAsRocksim(file);
 		}
@@ -1447,18 +1486,32 @@ public class BasicFrame extends JFrame {
 				return false;
 			}
 		}
-		if (!FileHelper.confirmWrite(file, this)) {
-			return false;
-		}
 
+		StorageOptions options = new StorageOptions();
+		options.setFileType(StorageOptions.FileType.ROCKSIM);
+		return saveRocksimFile(file, options);
+	}
+
+	/**
+	 * Perform the actual saving of the Rocksim file
+	 * @param file file to be stored
+	 * @param options storage options to use
+	 * @return true if the file was written
+	 */
+	private boolean saveRocksimFile(File file, StorageOptions options) {
 		try {
-			StorageOptions options = new StorageOptions();
-			options.setFileType(StorageOptions.FileType.ROCKSIM);
 			ROCKET_SAVER.save(file, document, options);
 			// Do not update the save state of the document.
 			return true;
 		} catch (IOException e) {
 			return false;
+		} catch (DecalNotFoundException decex) {
+			DecalImage decal = decex.getDecal();
+			// Check if the user replaced the source file, if not, just ignore the faulty decal on the next save
+			if (!DecalNotFoundDialog.showDialog(null, decex) && decal != null) {
+				decal.setIgnored(true);
+			}
+			return saveRocksimFile(file, options);	// Resave
 		}
 	}
 
@@ -1542,6 +1595,16 @@ public class BasicFrame extends JFrame {
 						"An I/O error occurred while saving:",
 						e.getMessage() }, "Saving failed", JOptionPane.ERROR_MESSAGE);
 				return false;
+			}
+			else if (cause instanceof DecalNotFoundException) {
+				DecalNotFoundException decex = (DecalNotFoundException) cause;
+				DecalImage decal = decex.getDecal();
+				// Check if the user replaced the source file, if not, just ignore the faulty decal on the next save
+				if (!DecalNotFoundDialog.showDialog(null, decex) && decal != null) {
+					decal.setIgnored(true);
+				}
+				return saveAsOpenRocket(file);	// Resave
+
 			} else {
 				Reflection.handleWrappedException(e);
 			}
@@ -1557,7 +1620,7 @@ public class BasicFrame extends JFrame {
 	private boolean closeAction() {
 		if (!document.isSaved()) {
 			log.info("Confirming whether to save the design");
-			ComponentConfigDialog.hideDialog();
+			ComponentConfigDialog.disposeDialog();
 			int result = JOptionPane.showConfirmDialog(this,
 					trans.get("BasicFrame.dlg.lbl1") + rocket.getName() +
 					trans.get("BasicFrame.dlg.lbl2") + "  " +
@@ -1585,7 +1648,7 @@ public class BasicFrame extends JFrame {
 		log.debug("Disposing window");
 		this.dispose();
 
-		ComponentConfigDialog.hideDialog();
+		ComponentConfigDialog.disposeDialog();
 		ComponentAnalysisDialog.hideDialog();
 
 		frames.remove(this);
@@ -1693,10 +1756,19 @@ public class BasicFrame extends JFrame {
 		}
 	}
 
+	public void setSelectedComponent(RocketComponent component) {
+		this.selectionModel.setSelectedComponent(component);
+	}
+
+	public void setSelectedComponents(List<RocketComponent> components) {
+		this.selectionModel.setSelectedComponents(components);
+	}
+
+
 	public void stateChanged(ChangeEvent e) {
 		JTabbedPane tabSource = (JTabbedPane) e.getSource();
-		String tab = tabSource.getTitleAt(tabSource.getSelectedIndex());
-		if (tab.equals(trans.get("BasicFrame.tab.Flightsim"))) {
+		int tab = tabSource.getSelectedIndex();
+		if (tab == SIMULATION_TAB) {
 			simulationPanel.activating();
 		}
 	}

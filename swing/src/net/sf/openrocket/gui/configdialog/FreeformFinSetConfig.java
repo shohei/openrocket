@@ -1,6 +1,5 @@
 package net.sf.openrocket.gui.configdialog;
 
-import java.awt.Dimension;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
@@ -35,7 +34,6 @@ import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.table.AbstractTableModel;
 
-import net.sf.openrocket.util.MathUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -67,6 +65,7 @@ import net.sf.openrocket.rocketcomponent.position.AxialMethod;
 import net.sf.openrocket.startup.Application;
 import net.sf.openrocket.unit.UnitGroup;
 import net.sf.openrocket.util.Coordinate;
+import net.sf.openrocket.gui.widgets.SelectColorButton;
 
 @SuppressWarnings("serial")
 public class FreeformFinSetConfig extends FinSetConfig {
@@ -238,12 +237,12 @@ public class FreeformFinSetConfig extends FinSetConfig {
 		});
 		JScrollPane tablePane = new JScrollPane(table);
 		
-		JButton scaleButton = new JButton(trans.get("FreeformFinSetConfig.lbl.scaleFin"));
+		JButton scaleButton = new SelectColorButton(trans.get("FreeformFinSetConfig.lbl.scaleFin"));
 		scaleButton.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				log.info(Markers.USER_MARKER, "Scaling free-form fin");
-				ScaleDialog dialog = new ScaleDialog(document, finset, SwingUtilities.getWindowAncestor(FreeformFinSetConfig.this), true);
+				ScaleDialog dialog = new ScaleDialog(document, new ArrayList<>(List.of(finset)), SwingUtilities.getWindowAncestor(FreeformFinSetConfig.this), true);
 				dialog.setVisible(true);
 				dialog.dispose();
 			}
@@ -252,23 +251,28 @@ public class FreeformFinSetConfig extends FinSetConfig {
 		//		panel.add(new JLabel("Coordinates:"), "aligny bottom, alignx 50%");
 		//		panel.add(new JLabel("    View:"), "wrap, aligny bottom");
 		
-		JButton exportCsvButton = new JButton("Export CSV");
+		JButton exportCsvButton = new SelectColorButton(trans.get("FreeformFinSetConfig.lbl.exportCSV"));
 		exportCsvButton.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				log.info(Markers.USER_MARKER, "Export CSV free-form fin");
 				
 				JFileChooser chooser = new JFileChooser();
-				// Demonstrate "Save" dialog:
+				chooser.setFileFilter(FileHelper.CSV_FILTER);
+				chooser.setCurrentDirectory(((SwingPreferences) Application.getPreferences()).getDefaultDirectory());
 
                 if (JFileChooser.APPROVE_OPTION == chooser.showSaveDialog(FreeformFinSetConfig.this)){
                 	File selectedFile= chooser.getSelectedFile();
+					selectedFile = FileHelper.forceExtension(selectedFile, "csv");
+					if (!FileHelper.confirmWrite(selectedFile, panel)) {
+						return;
+					}
 
 				    FreeformFinSetConfig.writeCSVFile(table, selectedFile);
 				}
 			}
 		});
-        JButton importButton = new JButton(trans.get("CustomFinImport.button.label"));
+        JButton importButton = new SelectColorButton(trans.get("CustomFinImport.button.label"));
             importButton.addActionListener(new ActionListener() {
                 @Override
                 public void actionPerformed(ActionEvent e) {

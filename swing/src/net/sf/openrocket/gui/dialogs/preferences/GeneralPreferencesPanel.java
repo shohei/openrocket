@@ -24,8 +24,10 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
 import net.miginfocom.swing.MigLayout;
+import net.sf.openrocket.communication.ReleaseInfo;
 import net.sf.openrocket.communication.UpdateInfo;
 import net.sf.openrocket.communication.UpdateInfoRetriever;
+import net.sf.openrocket.communication.UpdateInfoRetriever.ReleaseStatus;
 import net.sf.openrocket.gui.components.DescriptionArea;
 import net.sf.openrocket.gui.components.StyledLabel;
 import net.sf.openrocket.gui.components.StyledLabel.Style;
@@ -39,6 +41,7 @@ import net.sf.openrocket.startup.Preferences;
 import net.sf.openrocket.util.BuildProperties;
 import net.sf.openrocket.util.Named;
 import net.sf.openrocket.util.Utils;
+import net.sf.openrocket.gui.widgets.SelectColorButton;
 
 @SuppressWarnings("serial")
 public class GeneralPreferencesPanel extends PreferencesPanel {
@@ -123,7 +126,7 @@ public class GeneralPreferencesPanel extends PreferencesPanel {
 		this.add(field, "w 100px, gapright unrel, spanx, growx, split");
 		
 		//// Add button
-		JButton button = new JButton(trans.get("pref.dlg.but.add"));
+		JButton button = new SelectColorButton(trans.get("pref.dlg.but.add"));
 		button.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
@@ -166,7 +169,7 @@ public class GeneralPreferencesPanel extends PreferencesPanel {
 		this.add(button, "gapright unrel");
 		
 		//// Reset button
-		button = new JButton(trans.get("pref.dlg.but.reset"));
+		button = new SelectColorButton(trans.get("pref.dlg.but.reset"));
 		
 		button.addActionListener(new ActionListener() {
 			@Override
@@ -199,7 +202,7 @@ public class GeneralPreferencesPanel extends PreferencesPanel {
 		this.add(softwareUpdateBox);
 		
 		//// Check now button
-		button = new JButton(trans.get("pref.dlg.but.checknow"));
+		button = new SelectColorButton(trans.get("pref.dlg.but.checknow"));
 		//// Check for software updates now
 		button.setToolTipText(trans.get("pref.dlg.ttip.Checkupdatesnow"));
 		button.addActionListener(new ActionListener() {
@@ -238,7 +241,7 @@ public class GeneralPreferencesPanel extends PreferencesPanel {
 
 	private void checkForUpdates() {
 		final UpdateInfoRetriever retriever = new UpdateInfoRetriever();
-		retriever.start();
+		retriever.startFetchUpdateInfo();
 		
 		
 		// Progress dialog
@@ -253,7 +256,7 @@ public class GeneralPreferencesPanel extends PreferencesPanel {
 		panel.add(bar, "growx, wrap para");
 		
 		//// Cancel button
-		JButton cancel = new JButton(trans.get("dlg.but.cancel"));
+		JButton cancel = new SelectColorButton(trans.get("dlg.but.cancel"));
 		cancel.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
@@ -289,30 +292,47 @@ public class GeneralPreferencesPanel extends PreferencesPanel {
 		
 		// Check result
 		UpdateInfo info = retriever.getUpdateInfo();
+
+		// Something went wrong
 		if (info == null) {
 			JOptionPane.showMessageDialog(this,
 					//// An error occurred while communicating with the server.
-					trans.get("pref.dlg.lbl.msg1"),
+					trans.get("update.dlg.error"),
 					//// Unable to retrieve update information
-					trans.get("pref.dlg.lbl.msg2"), JOptionPane.WARNING_MESSAGE, null);
-		} else if (info.getLatestVersion() == null ||
-				info.getLatestVersion().equals("") ||
-				BuildProperties.getVersion().equalsIgnoreCase(info.getLatestVersion())) {
-			JOptionPane.showMessageDialog(this,
-					//// You are running the latest version of OpenRocket.
-					trans.get("pref.dlg.lbl.msg3"),
-					//// No updates available
-					trans.get("pref.dlg.lbl.msg4"), JOptionPane.INFORMATION_MESSAGE, null);
-		} else {
-			UpdateInfoDialog infoDialog = new UpdateInfoDialog(info);
-			infoDialog.setVisible(true);
-			if (infoDialog.isReminderSelected()) {
-				preferences.putString(SwingPreferences.LAST_UPDATE, "");
-			} else {
-				preferences.putString(SwingPreferences.LAST_UPDATE, info.getLatestVersion());
-			}
+					trans.get("update.dlg.error.title"), JOptionPane.WARNING_MESSAGE, null);
+			return;
 		}
-		
+
+		// Something went wrong, but we know what went wrong
+		if (info.getException() != null) {
+			JOptionPane.showMessageDialog(this,
+					info.getException().getMessage(),
+					trans.get("update.dlg.exception.title"), JOptionPane.WARNING_MESSAGE, null);
+			return;
+		}
+
+		// Nothing went wrong (yay!)
+		ReleaseStatus status = info.getReleaseStatus();
+		ReleaseInfo release = info.getLatestRelease();
+		switch (status) {
+			case LATEST:
+				JOptionPane.showMessageDialog(this,
+						//// You are running the latest version of OpenRocket.
+						String.format(trans.get("update.dlg.latestVersion"), BuildProperties.getVersion()),
+						//// No updates available
+						trans.get("update.dlg.latestVersion.title"), JOptionPane.INFORMATION_MESSAGE, null);
+				break;
+			case NEWER:
+				JOptionPane.showMessageDialog(this,
+						//// You are running a newer version than the latest official release
+						String.format("<html><body><p style='width: %dpx'>%s", 400, String.format(trans.get("update.dlg.newerVersion"),
+								BuildProperties.getVersion(), release.getReleaseName())),
+						//// Newer version detected
+						trans.get("update.dlg.newerVersion.title"), JOptionPane.INFORMATION_MESSAGE, null);
+				break;
+			case OLDER:
+				UpdateInfoDialog infoDialog = new UpdateInfoDialog(info);
+				infoDialog.setVisible(true);
+		}
 	}
-	
 }

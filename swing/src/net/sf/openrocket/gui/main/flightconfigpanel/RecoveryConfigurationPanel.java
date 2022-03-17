@@ -2,14 +2,19 @@ package net.sf.openrocket.gui.main.flightconfigpanel;
 
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.List;
 
+import javax.swing.AbstractAction;
 import javax.swing.JButton;
+import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
+import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 
@@ -20,6 +25,7 @@ import net.sf.openrocket.rocketcomponent.*;
 import net.sf.openrocket.rocketcomponent.DeploymentConfiguration.DeployEvent;
 import net.sf.openrocket.startup.Application;
 import net.sf.openrocket.unit.UnitGroup;
+import net.sf.openrocket.gui.widgets.SelectColorButton;
 
 public class RecoveryConfigurationPanel extends FlightConfigurablePanel<RecoveryDevice> {
 
@@ -38,7 +44,7 @@ public class RecoveryConfigurationPanel extends FlightConfigurablePanel<Recovery
 		this.add(scroll, "span, grow, wrap");
 
 		//// Select deployment
-		selectDeploymentButton = new JButton(trans.get("edtmotorconfdlg.but.Selectdeployment"));
+		selectDeploymentButton = new SelectColorButton(trans.get("edtmotorconfdlg.but.Selectdeployment"));
 		selectDeploymentButton.setEnabled(false);
 		selectDeploymentButton.addActionListener(new ActionListener() {
 			@Override
@@ -49,7 +55,7 @@ public class RecoveryConfigurationPanel extends FlightConfigurablePanel<Recovery
 		this.add(selectDeploymentButton, "split, align right, sizegroup button");
 
 		//// Reset deployment
-		resetDeploymentButton = new JButton(trans.get("edtmotorconfdlg.but.Resetdeployment"));
+		resetDeploymentButton = new SelectColorButton(trans.get("edtmotorconfdlg.but.Resetdeployment"));
 		resetDeploymentButton.setEnabled(false);
 		resetDeploymentButton.addActionListener(new ActionListener() {
 			@Override
@@ -58,6 +64,16 @@ public class RecoveryConfigurationPanel extends FlightConfigurablePanel<Recovery
 			}
 		});
 		this.add(resetDeploymentButton, "sizegroup button, wrap");
+
+		// Set 'Enter' key action to open the recovery selection dialog
+		table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(
+				KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "Enter");
+		table.getActionMap().put("Enter", new AbstractAction() {
+			@Override
+			public void actionPerformed(ActionEvent ae) {
+				selectDeployment();
+			}
+		});
 	}
 
 	@Override
@@ -67,7 +83,7 @@ public class RecoveryConfigurationPanel extends FlightConfigurablePanel<Recovery
 		JTable recoveryTable = new JTable(recoveryTableModel);
 		recoveryTable.getTableHeader().setReorderingAllowed(false);
 		recoveryTable.setCellSelectionEnabled(true);
-		recoveryTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		recoveryTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
 		recoveryTable.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mouseClicked(MouseEvent e) {
@@ -96,24 +112,77 @@ public class RecoveryConfigurationPanel extends FlightConfigurablePanel<Recovery
 		return recoveryTable;
 	}
 
-	private void selectDeployment() {
-		RecoveryDevice c = getSelectedComponent();
-		if (c == null) {
+	public void selectDeployment() {
+		List<RecoveryDevice> devices = getSelectedComponents();
+		List<FlightConfigurationId> fcIds = getSelectedConfigurationIds();
+		if ((devices == null) || (fcIds == null) || (devices.size() == 0) || fcIds.size() == 0) {
 			return;
 		}
-		JDialog d = new DeploymentSelectionDialog(SwingUtilities.getWindowAncestor(this), rocket, c);
+
+		boolean update = false;
+		RecoveryDevice initDevice = devices.get(0);
+		FlightConfigurationId initFcId = fcIds.get(0);
+
+		DeploymentConfiguration initialConfig = initDevice.getDeploymentConfigurations().get(initFcId).copy(initFcId);
+		JDialog d = new DeploymentSelectionDialog(SwingUtilities.getWindowAncestor(this), rocket, initDevice);
 		d.setVisible(true);
-		fireTableDataChanged();
+
+		if (!initialConfig.equals(initDevice.getDeploymentConfigurations().get(initFcId))) {
+			update = true;
+		}
+
+		double deployDelay = initDevice.getDeploymentConfigurations().get(initFcId).getDeployDelay();
+		double deployAltitude = initDevice.getDeploymentConfigurations().get(initFcId).getDeployAltitude();
+		DeployEvent deployEvent = initDevice.getDeploymentConfigurations().get(initFcId).getDeployEvent();
+
+		for (int i = 0; i < devices.size(); i++) {
+			for (int j = 0; j < fcIds.size(); j++) {
+				if ((i == 0) && (j == 0)) break;
+
+				final RecoveryDevice device = devices.get(i);
+				final FlightConfigurationId fcId = fcIds.get(j);
+				DeploymentConfiguration config = device.getDeploymentConfigurations().get(fcId).copy(fcId);
+				initialConfig = config.copy(fcId);
+
+				config.setDeployDelay(deployDelay);
+				config.setDeployAltitude(deployAltitude);
+				config.setDeployEvent(deployEvent);
+
+				device.getDeploymentConfigurations().set(fcId, config);
+
+				if (!initialConfig.equals(device.getDeploymentConfigurations().get(fcId))) {
+					update = true;
+				}
+			}
+		}
+
+		if (update) {
+			fireTableDataChanged(ComponentChangeEvent.AERODYNAMIC_CHANGE);
+		}
+
 	}
 
 	private void resetDeployment() {
-		RecoveryDevice c = getSelectedComponent();
-		if (c == null) {
+		List<RecoveryDevice> devices = getSelectedComponents();
+		List<FlightConfigurationId> fcIds = getSelectedConfigurationIds();
+		if ((devices == null) || (fcIds == null) || (devices.size() == 0) || fcIds.size() == 0) {
 			return;
 		}
-		FlightConfigurationId id = rocket.getSelectedConfiguration().getFlightConfigurationID();
-		c.getDeploymentConfigurations().reset(id);
-		fireTableDataChanged();
+
+		boolean update = false;
+		for (RecoveryDevice device : devices) {
+			for (FlightConfigurationId fcId : fcIds) {
+				DeploymentConfiguration initialConfig = device.getDeploymentConfigurations().get(fcId).copy(fcId);
+				device.getDeploymentConfigurations().reset(fcId);
+
+				if (!initialConfig.equals(device.getDeploymentConfigurations().get(fcId))) {
+					update = true;
+				}
+			}
+		}
+		if (update) {
+			fireTableDataChanged(ComponentChangeEvent.AERODYNAMIC_CHANGE);
+		}
 	}
 
 	public void updateButtonState() {

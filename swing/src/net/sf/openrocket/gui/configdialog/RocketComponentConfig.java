@@ -22,7 +22,6 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 
 import net.miginfocom.swing.MigLayout;
-import net.sf.openrocket.database.ComponentPresetDatabase;
 import net.sf.openrocket.document.OpenRocketDocument;
 import net.sf.openrocket.gui.SpinnerEditor;
 import net.sf.openrocket.gui.adaptors.BooleanModel;
@@ -36,6 +35,7 @@ import net.sf.openrocket.gui.components.StyledLabel;
 import net.sf.openrocket.gui.components.StyledLabel.Style;
 import net.sf.openrocket.gui.components.UnitSelector;
 import net.sf.openrocket.gui.util.GUIUtil;
+import net.sf.openrocket.gui.widgets.SelectColorButton;
 import net.sf.openrocket.l10n.Translator;
 import net.sf.openrocket.material.Material;
 import net.sf.openrocket.preset.ComponentPreset;
@@ -93,7 +93,6 @@ public class RocketComponentConfig extends JPanel {
 		if (component.getPresetType() != null) {
 			// If the component supports a preset, show the preset selection box.
 			presetModel = new PresetModel(this, document, component);
-			((ComponentPresetDatabase) Application.getComponentPresetDao()).addDatabaseListener(presetModel);
 			presetComboBox = new JComboBox(presetModel);
 			presetComboBox.setEditable(false);
 			this.add(presetComboBox, "");
@@ -138,18 +137,18 @@ public class RocketComponentConfig extends JPanel {
 		}
 		
 		//// Close button
-		JButton closeButton = new JButton(trans.get("dlg.but.close"));
+		JButton closeButton = new SelectColorButton(trans.get("dlg.but.close"));
 		closeButton.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent arg0) {
-				ComponentConfigDialog.hideDialog();
+				ComponentConfigDialog.disposeDialog();
 			}
 		});
 		buttonPanel.add(closeButton, "right, gap 30lp");
 		
 		updateFields();
 		
-		this.add(buttonPanel, "newline, spanx, growx, height 32!");
+		this.add(buttonPanel, "newline, spanx, growx");
 	}
 	
 	
@@ -242,7 +241,7 @@ public class RocketComponentConfig extends JPanel {
 			subPanel.add( finishCombo, "spanx 4, growx, split");
 			
 			//// Set for all
-			JButton button = new JButton(trans.get("RocketCompCfg.but.Setforall"));
+			JButton button = new SelectColorButton(trans.get("RocketCompCfg.but.Setforall"));
 			//// Set this finish for all components of the rocket.
 			button.setToolTipText(trans.get("RocketCompCfg.but.ttip.Setforall"));
 			button.addActionListener(new ActionListener() {
@@ -339,16 +338,31 @@ public class RocketComponentConfig extends JPanel {
 		m = new DoubleModel(component, "OverrideCGX", UnitGroup.UNITS_LENGTH, 0);
 		// Calculate suitable length for slider
 		DoubleModel length;
-		if (component instanceof ComponentAssembly) {
-			double l = 0;
-			
-			Iterator<RocketComponent> iterator = component.iterator(false);
+		if (component.getChildCount() > 0) {
+			Iterator<RocketComponent> iterator = component.iterator(true);
+			double minL = Double.MAX_VALUE;
+			double maxL = Double.MIN_VALUE;
+
 			while (iterator.hasNext()) {
 				RocketComponent c = iterator.next();
-				if (c.getAxialMethod() == AxialMethod.AFTER)
-					l += c.getLength();
+
+				double compPos = c.getAxialOffset(AxialMethod.ABSOLUTE);
+				if (compPos < minL) {
+					minL = compPos;
+				}
+
+				double compLen = c.getLength();
+				if (c instanceof FinSet) {
+					compLen = ((FinSet) c).getInstanceBoundingBox().span().x;
+				}
+				if (compPos + compLen > maxL) {
+					maxL = compPos + compLen;
+				}
 			}
-			length = new DoubleModel(l);
+			length = new DoubleModel(maxL - minL);
+		} else if (component instanceof FinSet) {
+			double compLen = ((FinSet) component).getInstanceBoundingBox().span().x;
+			length = new DoubleModel(compLen);
 		} else {
 			length = new DoubleModel(component, "Length", UnitGroup.UNITS_LENGTH, 0);
 		}
@@ -364,23 +378,29 @@ public class RocketComponentConfig extends JPanel {
 		
 		bs = new BasicSlider(m.getSliderModel(new DoubleModel(0), length));
 		bm.addEnableComponent(bs);
-		panel.add(bs, "growx 5, w 100lp, wrap 35lp");
+		panel.add(bs, "growx 5, w 100lp, wrap");
 		
 
 		//END OVERRIDES CG ---------------------------------------------------
 
+		// Override subcomponents checkbox
+		bm = new BooleanModel(component, "OverrideSubcomponents");
+		check = new JCheckBox(bm);
+		//// Override mass and CG of all subcomponents
+		check.setText(trans.get("RocketCompCfg.checkbox.OverridemassandCG"));
+		panel.add(check, "spanx, wrap 35lp");
 
-                //BEGIN OVERRIDES CD ---------------------------------------------------
+
+        //BEGIN OVERRIDES CD ---------------------------------------------------
 
 
 		bm = new BooleanModel(component, "CDOverridden");
 		check = new JCheckBox(bm);
-		//// Override mass:
-		check.setText("Set coefficient of drag:");
+		//// Override coefficient of drag:
+		check.setText(trans.get("RocketCompCfg.checkbox.SetDragCoeff"));
 		panel.add(check, "growx 1, gapright 20lp");
 		
-		m = new DoubleModel(component, "OverrideCD", UnitGroup.UNITS_NONE, 0);
-		
+		m = new DoubleModel(component, "OverrideCD", UnitGroup.UNITS_COEFFICIENT, 0);
 		spin = new JSpinner(m.getSpinnerModel());
 
 		spin.setEditor(new SpinnerEditor(spin));
@@ -388,29 +408,19 @@ public class RocketComponentConfig extends JPanel {
 		panel.add(spin, "growx 1");
 		
 		
-		bs = new BasicSlider(m.getSliderModel(0, 0.01, 1.0));
+		bs = new BasicSlider(m.getSliderModel(0, 1.0));
 		bm.addEnableComponent(bs);
 		panel.add(bs, "growx 5, w 100lp, wrap");
 
 
 		//END OVERRIDES CP --------------------------------------------------
 
-
-
-		
-		// Override subcomponents checkbox
-		bm = new BooleanModel(component, "OverrideSubcomponents");
-		check = new JCheckBox(bm);
-		//// Override mass and CG of all subcomponents
-		check.setText(trans.get("RocketCompCfg.checkbox.OverridemassandCG"));
-		panel.add(check, "gap para, spanx, wrap para");
-		
-		//// <html>The overridden mass does not include motors.<br>
+		//// The overridden mass does not include motors.
 		panel.add(new StyledLabel(trans.get("RocketCompCfg.lbl.longB1") +
-				//// The center of gravity is measured from the front end of the
-				trans.get("RocketCompCfg.lbl.longB2") + " " +
-				component.getComponentName().toLowerCase(Locale.getDefault()) + ".", -1),
-				"spanx, wrap, gap para, height 0::30lp");
+						//// The center of gravity is measured from the front end of the
+						trans.get("RocketCompCfg.lbl.longB2") + " " +
+						component.getComponentName().toLowerCase(Locale.getDefault()) + ".", -1),
+				"spanx, pushy, aligny bottom");
 		
 		return panel;
 	}
@@ -622,7 +632,6 @@ public class RocketComponentConfig extends JPanel {
 		for (Invalidatable i : invalidatables) {
 			i.invalidate();
 		}
-		((ComponentPresetDatabase) Application.getComponentPresetDao()).removeChangeListener(presetModel);
 	}
 	
 

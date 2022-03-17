@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.Deque;
 import java.util.EventObject;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.NoSuchElementException;
 
@@ -97,11 +98,11 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 	
 	// Override mass/CG
 	private double overrideMass = 0;
-	private boolean massOverriden = false;
+	private boolean massOverridden = false;
 	private double overrideCGX = 0;
-	private boolean cgOverriden = false;
+	private boolean cgOverridden = false;
 	private double overrideCD = 0;
-	private boolean cdOverriden = false;
+	private boolean cdOverridden = false;
 	
 	private boolean overrideSubcomponents = false;
 	
@@ -120,14 +121,31 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 	
 	// The realistic appearance of this component
 	private Appearance appearance = null;
+
+	// If true, component change events will not be fired
+	private boolean ignoreComponentChange = false;
 	
 	
 	/**
 	 * Used to invalidate the component after calling {@link #copyFrom(RocketComponent)}.
 	 */
-	private Invalidator invalidator = new Invalidator(this);
-	
-	
+	private final Invalidator invalidator = new Invalidator(this);
+
+	/**
+	 * List of components that will set their properties to the same as the current component
+	 */
+	protected final List<RocketComponent> configListeners = new LinkedList<>();
+
+
+	/**
+	 * This is for determining the order in which the component should be drawn in the 2D views, both
+	 * in the side view and in the back view.
+	 * Lower values will be placed more in the back, higher values more in the front.
+	 * A high enough init value is picked to not mess with pre-defined values.
+	 */
+	protected int displayOrder_side = 100;
+	protected int displayOrder_back = 100;
+
 	////  NOTE !!!  All fields must be copied in the method copyFrom()!  ////
 	
 	
@@ -225,7 +243,7 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 	 * Return a collection of bounding coordinates.  The coordinates must be such that
 	 * the component is fully enclosed in their convex hull.
 	 * 
-	 * Note: this function gets the bounds only for this component.  Subchildren must be called individually.
+	 * Note: this function gets the bounds only for this component.  Sub-children must be called individually.
 	 *
 	 * @return	a collection of coordinates that bound the component.
 	 */
@@ -433,6 +451,10 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 	 * @param appearance
 	 */
 	public void setAppearance(Appearance appearance) {
+		for (RocketComponent listener : configListeners) {
+			listener.setAppearance(appearance);
+		}
+
 		this.appearance = appearance;
 		if (this.appearance != null) {
 			Decal d = this.appearance.getTexture();
@@ -447,7 +469,7 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 				});
 			}
 		}
-		// CHECK - should this be a TEXTURE_CHANGE and not NONFUNCTIONAL_CHANGE?
+
 		fireComponentChangeEvent(ComponentChangeEvent.NONFUNCTIONAL_CHANGE);
 	}
 	
@@ -464,6 +486,10 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 	 * Set the color of the object to use in 2D figures.
 	 */
 	public final void setColor(Color c) {
+		for (RocketComponent listener : configListeners) {
+			listener.setColor(c);
+		}
+
 		if ((color == null && c == null) ||
 				(color != null && color.equals(c)))
 			return;
@@ -480,6 +506,10 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 	}
 	
 	public final void setLineStyle(LineStyle style) {
+		for (RocketComponent listener : configListeners) {
+			listener.setLineStyle(style);
+		}
+
 		if (this.lineStyle == style)
 			return;
 		checkState();
@@ -508,11 +538,15 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 	 * @param m  the override mass
 	 */
 	public final void setOverrideMass(double m) {
+		for (RocketComponent listener : configListeners) {
+			listener.setOverrideMass(m);
+		}
+
 		if (MathUtil.equals(m, overrideMass))
 			return;
 		checkState();
 		overrideMass = Math.max(m, 0);
-		if (massOverriden)
+		if (massOverridden)
 			fireComponentChangeEvent(ComponentChangeEvent.MASS_CHANGE);
 	}
 	
@@ -524,7 +558,7 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 	 */
 	public final boolean isMassOverridden() {
 		mutex.verify();
-		return massOverriden;
+		return massOverridden;
 	}
 	
 	/**
@@ -533,11 +567,17 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 	 * @param o  whether the mass is overridden
 	 */
 	public final void setMassOverridden(boolean o) {
-		if (massOverriden == o) {
+		for (RocketComponent listener : configListeners) {
+			listener.setIgnoreComponentChange(false);
+			listener.setMassOverridden(o);
+			listener.setIgnoreComponentChange(false);
+		}
+
+		if (massOverridden == o) {
 			return;
 		}
 		checkState();
-		massOverriden = o;
+		massOverridden = o;
 		fireComponentChangeEvent(ComponentChangeEvent.MASS_CHANGE);
 	}
 	
@@ -571,6 +611,10 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 	 * @param x  the x-coordinate of the override CG to set.
 	 */
 	public final void setOverrideCGX(double x) {
+		for (RocketComponent listener : configListeners) {
+			listener.setOverrideCGX(x);
+		}
+
 		if (MathUtil.equals(overrideCGX, x))
 			return;
 		checkState();
@@ -588,7 +632,7 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 	 */
 	public final boolean isCGOverridden() {
 		mutex.verify();
-		return cgOverriden;
+		return cgOverridden;
 	}
 	
 	/**
@@ -597,17 +641,23 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 	 * @param o  whether the CG is overridden
 	 */
 	public final void setCGOverridden(boolean o) {
-		if (cgOverriden == o) {
+		for (RocketComponent listener : configListeners) {
+			listener.setIgnoreComponentChange(false);
+			listener.setCGOverridden(o);
+			listener.setIgnoreComponentChange(true);
+		}
+
+		if (cgOverridden == o) {
 			return;
 		}
 		checkState();
-		cgOverriden = o;
+		cgOverridden = o;
 		fireComponentChangeEvent(ComponentChangeEvent.MASS_CHANGE);
 	}
 
 
 
-	/** Return the current override CD. The CD is not neccesarily overriden.
+	/** Return the current override CD. The CD is not necessarily overridden.
 	 * 
 	 * @return the override CG.
 	 */
@@ -622,6 +672,10 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 	 * @param x the override CD to set.
 	 */
 	public final void setOverrideCD(double x) {
+		for (RocketComponent listener : configListeners) {
+			listener.setOverrideCD(x);
+		}
+
 		if (MathUtil.equals(overrideCD, x))
 			return;
 		checkState();
@@ -635,27 +689,31 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 
 
 	/**
-	 * Return whether the CD is currently overriden.
+	 * Return whether the CD is currently overridden.
 	 * 
 	 * @return whether the CD is overridden
 	 */
 	public final boolean isCDOverridden() {
 		mutex.verify();
-		return cdOverriden;
+		return cdOverridden;
 	}
 
 
 	/**
-	 * Set whether the CD is currently overriden.
+	 * Set whether the CD is currently overridden.
 	 *
-	 * @param o whether the CD is overriden
+	 * @param o whether the CD is overridden
 	 */
 	public final void setCDOverridden(boolean o) {
-		if(cdOverriden == o) {
+		for (RocketComponent listener : configListeners) {
+			listener.setCDOverridden(o);
+		}
+
+		if(cdOverridden == o) {
 			return;
 		}
 		checkState();
-		cdOverriden = o;
+		cdOverridden = o;
 		fireComponentChangeEvent(ComponentChangeEvent.MASS_CHANGE);
 	}
 	
@@ -684,11 +742,16 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 	 * @param override	whether the mass and/or CG override overrides all subcomponent.
 	 */
 	public void setOverrideSubcomponents(boolean override) {
+		for (RocketComponent listener : configListeners) {
+			listener.setOverrideSubcomponents(override);
+		}
+
 		if (overrideSubcomponents == override) {
 			return;
 		}
 		checkState();
 		overrideSubcomponents = override;
+
 		fireComponentChangeEvent(ComponentChangeEvent.MASS_CHANGE);
 	}
 	
@@ -729,6 +792,12 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 	 * the default name, currently the component name.
 	 */
 	public final void setName(String name) {
+		for (RocketComponent listener : configListeners) {
+			listener.setIgnoreComponentChange(false);
+			listener.setName(name);
+			listener.setIgnoreComponentChange(true);
+		}
+
 		if (this.name.equals(name)) {
 			return;
 		}
@@ -737,6 +806,7 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 			this.name = getComponentName();
 		else
 			this.name = name;
+
 		fireComponentChangeEvent(ComponentChangeEvent.NONFUNCTIONAL_CHANGE);
 	}
 	
@@ -758,6 +828,10 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 	 * @param comment  the comment of the component.
 	 */
 	public final void setComment(String comment) {
+		for (RocketComponent listener : configListeners) {
+			listener.setComment(comment);
+		}
+
 		if (this.comment.equals(comment))
 			return;
 		checkState();
@@ -765,6 +839,7 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 			this.comment = "";
 		else
 			this.comment = comment;
+
 		fireComponentChangeEvent(ComponentChangeEvent.NONFUNCTIONAL_CHANGE);
 	}
 	
@@ -796,6 +871,10 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 	 * @param preset	the preset component to load, or <code>null</code> to clear the preset.
 	 */
 	public final void loadPreset(ComponentPreset preset) {
+		for (RocketComponent listener : configListeners) {
+			listener.loadPreset(preset);
+		}
+
 		if (presetComponent == preset) {
 			return;
 		}
@@ -829,13 +908,14 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 			loadFromPreset(preset);
 			
 			this.presetComponent = preset;
-			fireComponentChangeEvent(ComponentChangeEvent.NONFUNCTIONAL_CHANGE);
 			
 		} finally {
 			if (rocket != null) {
 				rocket.thaw();
 			}
 		}
+
+		fireComponentChangeEvent(ComponentChangeEvent.NONFUNCTIONAL_CHANGE);
 	}
 	
 	
@@ -863,6 +943,10 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 	 * otherwise.
 	 */
 	public final void clearPreset() {
+		for (RocketComponent listener : configListeners) {
+			listener.clearPreset();
+		}
+
 		if (presetComponent == null)
 			return;
 		presetComponent = null;
@@ -930,6 +1014,10 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 	 * @param newAxialMethod	the relative positioning.
 	 */
 	public void setAxialMethod(final AxialMethod newAxialMethod) {
+		for (RocketComponent listener : configListeners) {
+			listener.setAxialMethod(newAxialMethod);
+		}
+
 		if (newAxialMethod == this.axialMethod) {
 			// no change.
 			return;
@@ -1274,7 +1362,7 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 	 */
 	public final double getMass() {
 		mutex.verify();
-		if (massOverriden)
+		if (massOverridden)
 			return overrideMass;
 		return getComponentMass();
 	}
@@ -1302,10 +1390,10 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 	 */
 	public final Coordinate getCG() {
 		checkState();
-		if (cgOverriden)
+		if (cgOverridden)
 			return getOverrideCG().setWeight(getMass());
 		
-		if (massOverriden)
+		if (massOverridden)
 			return getComponentCG().setWeight(getMass());
 		
 		return getComponentCG();
@@ -1500,7 +1588,11 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 		this.checkComponentStructure();
 		return children.get(n);
 	}
-	
+
+	/**
+	 * Returns all the direct children of this component. The result is a clone of the children list and may be edited.
+	 * @return direct children of this component.
+	 */
 	public final List<RocketComponent> getChildren() {
 		checkState();
 		this.checkComponentStructure();
@@ -1530,6 +1622,23 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 	public final RocketComponent getParent() {
 		checkState();
 		return parent;
+	}
+
+	/**
+	 * Get all the parent and super-parent components of this component.
+	 * @return parent and super-parents of this component
+	 */
+	public final List<RocketComponent> getParents() {
+		checkState();
+		List<RocketComponent> result = new LinkedList<>();
+		RocketComponent currComp = this;
+
+		while (currComp.parent != null) {
+			currComp = currComp.parent;
+			result.add(currComp);
+		}
+
+		return result;
 	}
 	
 	/**
@@ -1595,9 +1704,48 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 		while ( null != curComponent ) {
 			if( ComponentAssembly.class.isAssignableFrom( curComponent.getClass()))
 				return (ComponentAssembly) curComponent;
-			curComponent = curComponent.parent;
 		}
 		throw new IllegalStateException("getAssembly() called on hierarchy without a ComponentAssembly.");
+	}
+
+	/**
+	 * Return all the component assemblies that are a child of this component
+	 * @return list of ComponentAssembly components that are a child of this component
+	 */
+	public final List<RocketComponent> getChildAssemblies() {
+		checkState();
+
+		Iterator<RocketComponent> children = iterator(false);
+
+		List<RocketComponent> result = new ArrayList<>();
+
+		while (children.hasNext()) {
+			RocketComponent child = children.next();
+			if (child instanceof ComponentAssembly) {
+				result.add(child);
+			}
+		}
+		return result;
+	}
+
+	/**
+	 * Return all the component assemblies that are a parent or super-parent of this component
+	 * @return list of ComponentAssembly components that are a parent or super-parent of this component
+	 */
+	public final List<RocketComponent> getParentAssemblies() {
+		checkState();
+
+		List<RocketComponent> result = new LinkedList<>();
+		RocketComponent currComp = this;
+
+		while (currComp.parent != null) {
+			currComp = currComp.parent;
+			if (currComp instanceof ComponentAssembly) {
+				result.add(currComp);
+			}
+		}
+
+		return result;
 	}
 	
 	
@@ -1757,7 +1905,7 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 	 */
 	protected void fireComponentChangeEvent(ComponentChangeEvent e) {
 		checkState();
-		if (parent == null) {
+		if (parent == null || ignoreComponentChange) {
 			/* Ignore if root invalid. */
 			return;
 		}
@@ -1774,6 +1922,45 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 	 */
 	public void fireComponentChangeEvent(int type) {
 		fireComponentChangeEvent(new ComponentChangeEvent(this, type));
+	}
+
+	public void setIgnoreComponentChange(boolean newValue) {
+		this.ignoreComponentChange = newValue;
+	}
+
+	public boolean getIgnoreComponentChange() {
+		return this.ignoreComponentChange;
+	}
+
+	/**
+	 * Add a new config listener that will undergo the same configuration changes as this.component. Listener must be
+	 * of the same class as this.component.
+	 * @param listener new config listener
+	 * @return true if listener was successfully added, false if not
+	 */
+	public boolean addConfigListener(RocketComponent listener) {
+		if (listener == null || !this.getClass().equals(listener.getClass())) {
+			return false;
+		}
+		configListeners.add(listener);
+		listener.setIgnoreComponentChange(true);
+		return true;
+	}
+
+	public void removeConfigListener(RocketComponent listener) {
+		configListeners.remove(listener);
+		listener.setIgnoreComponentChange(false);
+	}
+
+	public void clearConfigListeners() {
+		for (RocketComponent listener : configListeners) {
+			listener.setIgnoreComponentChange(false);
+		}
+		configListeners.clear();
+	}
+
+	public List<RocketComponent> getConfigListeners() {
+		return configListeners;
 	}
 	
 	
@@ -2007,13 +2194,15 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 		this.color = src.color;
 		this.lineStyle = src.lineStyle;
 		this.overrideMass = src.overrideMass;
-		this.massOverriden = src.massOverriden;
+		this.massOverridden = src.massOverridden;
 		this.overrideCGX = src.overrideCGX;
-		this.cgOverriden = src.cgOverriden;
+		this.cgOverridden = src.cgOverridden;
 		this.overrideSubcomponents = src.overrideSubcomponents;
 		this.name = src.name;
 		this.comment = src.comment;
 		this.id = src.id;
+		this.displayOrder_side = src.displayOrder_side;
+		this.displayOrder_back = src.displayOrder_back;
 		
 		// Add source components to invalidation tree
 		for (RocketComponent c : src) {
@@ -2229,4 +2418,19 @@ public abstract class RocketComponent implements ChangeSource, Cloneable, Iterab
 		return false;
 	}
 
+	public int getDisplayOrder_side() {
+		return displayOrder_side;
+	}
+
+	public void setDisplayOrder_side(int displayOrder_side) {
+		this.displayOrder_side = displayOrder_side;
+	}
+
+	public int getDisplayOrder_back() {
+		return displayOrder_back;
+	}
+
+	public void setDisplayOrder_back(int displayOrder_back) {
+		this.displayOrder_back = displayOrder_back;
+	}
 }

@@ -17,6 +17,7 @@ import net.sf.openrocket.l10n.Translator;
 import net.sf.openrocket.rocketcomponent.FlightConfigurationId;
 import net.sf.openrocket.rocketcomponent.Rocket;
 import net.sf.openrocket.startup.Application;
+import net.sf.openrocket.gui.widgets.SelectColorButton;
 
 public class RenameConfigDialog extends JDialog {
 	private static final long serialVersionUID = -5423008694485357248L;
@@ -29,12 +30,12 @@ public class RenameConfigDialog extends JDialog {
 		
 		panel.add(new JLabel(trans.get("RenameConfigDialog.lbl.name")), "span, wrap rel");
 		
-		final JTextField textbox = new JTextField(rocket.getFlightConfiguration(fcid).getName());
+		final JTextField textbox = new JTextField(rocket.getFlightConfiguration(fcid).getNameRaw());
 		panel.add(textbox, "span, w 200lp, growx, wrap para");
 		
 		panel.add(new JPanel(), "growx");
 		
-		JButton okButton = new JButton(trans.get("button.ok"));
+		JButton okButton = new SelectColorButton(trans.get("button.ok"));
 		okButton.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
@@ -45,7 +46,7 @@ public class RenameConfigDialog extends JDialog {
 		});
 		panel.add(okButton);
 		
-		JButton renameToDefaultButton = new JButton(trans.get("RenameConfigDialog.but.reset"));
+		JButton renameToDefaultButton = new SelectColorButton(trans.get("RenameConfigDialog.but.reset"));
 		renameToDefaultButton.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
@@ -55,7 +56,7 @@ public class RenameConfigDialog extends JDialog {
 		});
 		panel.add(renameToDefaultButton);
 		
-		JButton cancel = new JButton(trans.get("button.cancel"));
+		JButton cancel = new SelectColorButton(trans.get("button.cancel"));
 		cancel.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {

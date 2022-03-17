@@ -18,6 +18,8 @@ import java.awt.event.ActionListener;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 
+import net.sf.openrocket.gui.widgets.SelectColorButton;
+
 /**
  *  The ButtonColumn class provides a renderer and an editor that looks like a
  *  JButton. The renderer and editor will then be used for a specified column
@@ -25,7 +27,7 @@ import java.awt.event.MouseListener;
  *  the button.
  *
  *  The button can be invoked by a mouse click or by pressing the space bar
- *  when the cell has focus. Optionaly a mnemonic can be set to invoke the
+ *  when the cell has focus. Optionally a mnemonic can be set to invoke the
  *  button. When the button is invoked the provided Action is invoked. The
  *  source of the Action will be the table. The action command will contain
  *  the model row number of the button that was clicked.
@@ -61,8 +63,8 @@ public class ButtonColumn extends AbstractCellEditor
 		this.table = table;
 		this.action = action;
 
-		renderButton = new JButton();
-		editButton = new JButton();
+		renderButton = new SelectColorButton();
+		editButton = new SelectColorButton();
 		editButton.setFocusPainted( false );
 		editButton.addActionListener( this );
 		originalBorder = editButton.getBorder();

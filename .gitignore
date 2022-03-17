@@ -52,6 +52,8 @@
 .idea/dictionaries
 .idea/vcs.xml
 .idea/jsLibraryMappings.xml
+.idea/codeStyles/
+.idea/runConfigurations.xml
 
 # Sensitive or high-churn files:
 .idea/dataSources.ids
@@ -91,3 +93,6 @@ fabric.properties
 openrocket.log
 
 *.snap
+prime/*
+swing/resources/datafiles/presets/system.ser
+swing/resources/datafiles/presets

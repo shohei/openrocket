@@ -21,6 +21,8 @@ public class Streamer extends RecoveryDevice {
 	public Streamer() {
 		this.stripLength = 0.5;
 		this.stripWidth = 0.05;
+		super.displayOrder_side = 10;		// Order for displaying the component in the 2D side view
+		super.displayOrder_back = 8;		// Order for displaying the component in the 2D back view
 	}
 	
 	
@@ -29,6 +31,12 @@ public class Streamer extends RecoveryDevice {
 	}
 	
 	public void setStripLength(double stripLength) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof Streamer) {
+				((Streamer) listener).setStripLength(stripLength);
+			}
+		}
+
 		if (MathUtil.equals(this.stripLength, stripLength))
 			return;
 		this.stripLength = stripLength;
@@ -41,6 +49,12 @@ public class Streamer extends RecoveryDevice {
 	}
 	
 	public void setStripWidth(double stripWidth) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof Streamer) {
+				((Streamer) listener).setStripWidth(stripWidth);
+			}
+		}
+
 		if (MathUtil.equals(this.stripWidth, stripWidth))
 			return;
 		this.stripWidth = stripWidth;
@@ -51,6 +65,12 @@ public class Streamer extends RecoveryDevice {
 	
 	@Override
 	public void setLength(double length) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof Streamer) {
+				((Streamer) listener).setStripWidth(length);
+			}
+		}
+
 		setStripWidth(length);
 	}
 	
@@ -62,6 +82,12 @@ public class Streamer extends RecoveryDevice {
 	}
 	
 	public void setAspectRatio(double ratio) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof Streamer) {
+				((Streamer) listener).setAspectRatio(ratio);
+			}
+		}
+
 		if (MathUtil.equals(getAspectRatio(), ratio))
 			return;
 		
@@ -79,6 +105,12 @@ public class Streamer extends RecoveryDevice {
 	}
 	
 	public void setArea(double area) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof Streamer) {
+				((Streamer) listener).setArea(area);
+			}
+		}
+
 		if (MathUtil.equals(getArea(), area))
 			return;
 		

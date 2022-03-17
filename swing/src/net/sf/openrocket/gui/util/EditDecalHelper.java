@@ -11,14 +11,18 @@ import net.sf.openrocket.appearance.DecalImage;
 import net.sf.openrocket.arch.SystemInfo;
 import net.sf.openrocket.arch.SystemInfo.Platform;
 import net.sf.openrocket.document.OpenRocketDocument;
+import net.sf.openrocket.gui.dialogs.DecalNotFoundDialog;
 import net.sf.openrocket.gui.dialogs.EditDecalDialog;
 import net.sf.openrocket.gui.watcher.FileWatcher;
 import net.sf.openrocket.gui.watcher.WatchEvent;
 import net.sf.openrocket.gui.watcher.WatchService;
 import net.sf.openrocket.l10n.Translator;
+import net.sf.openrocket.rocketcomponent.InsideColorComponent;
+import net.sf.openrocket.rocketcomponent.InsideColorComponentHandler;
 import net.sf.openrocket.rocketcomponent.RocketComponent;
 
 import com.google.inject.Inject;
+import net.sf.openrocket.util.DecalNotFoundException;
 
 public class EditDecalHelper {
 	
@@ -67,10 +71,12 @@ public class EditDecalHelper {
 	 * @param doc
 	 * @param component
 	 * @param decal
+	 * @param insideApp flag to check whether it is the inside appearance that is edited
 	 * @return
 	 * @throws EditDecalHelperException
 	 */
-	public DecalImage editDecal(Window parent, OpenRocketDocument doc, RocketComponent component, DecalImage decal) throws EditDecalHelperException {
+	public DecalImage editDecal(Window parent, OpenRocketDocument doc, RocketComponent component, DecalImage decal,
+								boolean insideApp) throws EditDecalHelperException {
 		
 		boolean sysPrefSet = prefs.isDecalEditorPreferenceSet();
 		int usageCount = doc.countDecalUsage(decal);
@@ -79,7 +85,7 @@ public class EditDecalHelper {
 		//First Check preferences
 		if (usageCount == 1 && (sysPrefSet || isSnapConfined)) {
 			String commandLine = isSnapConfined ? "xdg-open %%" : prefs.getDecalEditorCommandLine();
-			launchEditor(prefs.isDecalEditorPreferenceSystem(), commandLine, decal);
+			launchEditor(parent, prefs.isDecalEditorPreferenceSystem(), commandLine, decal);
 			return decal;
 		}
 		
@@ -111,10 +117,13 @@ public class EditDecalHelper {
 		}
 		
 		if (dialog.isEditOne()) {
-			decal = makeDecalUnique(doc, component, decal);
+			if (insideApp)
+				decal = makeDecalUnique(doc, component, decal);
+			else
+				decal = makeDecalUniqueInside(doc, component, decal);
 		}
 		
-		launchEditor(useSystemEditor, commandLine, decal);
+		launchEditor(parent, useSystemEditor, commandLine, decal);
 		
 		return decal;
 		
@@ -131,8 +140,23 @@ public class EditDecalHelper {
 		
 		return newImage;
 	}
+
+	private static DecalImage makeDecalUniqueInside(OpenRocketDocument doc, RocketComponent component, DecalImage decal) {
+
+		DecalImage newImage = doc.makeUniqueDecal(decal);
+
+		if (component instanceof InsideColorComponent) {
+			InsideColorComponentHandler handler = ((InsideColorComponent)component).getInsideColorComponentHandler();
+			AppearanceBuilder appearanceBuilder = new AppearanceBuilder(handler.getInsideAppearance());
+			appearanceBuilder.setImage(newImage);
+
+			handler.setInsideAppearance(appearanceBuilder.getAppearance());
+		}
+
+		return newImage;
+	}
 	
-	private void launchEditor(boolean useSystemEditor, String commandTemplate, final DecalImage decal) throws EditDecalHelperException {
+	private void launchEditor(Window parent, boolean useSystemEditor, String commandTemplate, final DecalImage decal) throws EditDecalHelperException {
 		
 		String decalId = decal.getName();
 		// Create Temp File.
@@ -166,6 +190,11 @@ public class EditDecalHelper {
 		} catch (IOException ioex) {
 			String message = MessageFormat.format(trans.get("EditDecalHelper.createFileException"), tmpFile.getAbsoluteFile());
 			throw new EditDecalHelperException(message, ioex);
+		} catch (DecalNotFoundException decex) {
+			if (DecalNotFoundDialog.showDialog(parent, decex)) {
+				launchEditor(parent, useSystemEditor, commandTemplate, decal);
+			}
+			return;
 		}
 		
 		

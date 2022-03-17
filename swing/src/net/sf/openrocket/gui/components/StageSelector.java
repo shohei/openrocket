@@ -10,7 +10,9 @@ import javax.swing.JPanel;
 import javax.swing.JToggleButton;
 
 import net.miginfocom.swing.MigLayout;
+import net.sf.openrocket.gui.widgets.SelectColorToggleButton;
 import net.sf.openrocket.rocketcomponent.AxialStage;
+import net.sf.openrocket.rocketcomponent.BodyTube;
 import net.sf.openrocket.rocketcomponent.ComponentChangeEvent;
 import net.sf.openrocket.rocketcomponent.FlightConfiguration;
 import net.sf.openrocket.rocketcomponent.Rocket;
@@ -35,8 +37,11 @@ public class StageSelector extends JPanel implements StateChangeListener {
 	private void updateButtons( final FlightConfiguration configuration ) {
 		buttons.clear();
 		this.removeAll();
-		for(AxialStage stage : configuration.getRocket().getStageList()){
-			JToggleButton button = new JToggleButton(new StageAction(stage));
+		List<RocketComponent> assemblies = configuration.getRocket().getChildAssemblies();
+
+		for (RocketComponent stage : assemblies) {
+			if (!(stage instanceof AxialStage)) continue;
+			JToggleButton button = new SelectColorToggleButton(new StageAction((AxialStage) stage));
 			button.setSelected(configuration.isStageActive(stage.getStageNumber()));
 			this.add(button);
 			buttons.add(button);
@@ -48,7 +53,7 @@ public class StageSelector extends JPanel implements StateChangeListener {
 	@Override
 	public void stateChanged(EventObject eo) {
 		Object source = eo.getSource();
-		if ((source instanceof Rocket) || (source instanceof AxialStage)) {
+		if ((source instanceof Rocket) || (source instanceof AxialStage) || (source instanceof BodyTube)) {
 			Rocket rkt = (Rocket) ((RocketComponent) source).getRoot();
 			updateButtons( rkt.getSelectedConfiguration() );
 		}

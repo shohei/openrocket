@@ -34,7 +34,8 @@ public class FlightConfiguration implements FlightConfigurableParameter<FlightCo
 	private static final Logger log = LoggerFactory.getLogger(FlightConfiguration.class);
 	private static final Translator trans = Application.getTranslator();
 
-    private String configurationName=null;
+    private String configurationName;
+	public static String DEFAULT_CONFIG_NAME = "[{motors}]";
 	
 	protected final Rocket rocket;
 	protected final FlightConfigurationId fcid;
@@ -62,6 +63,7 @@ public class FlightConfiguration implements FlightConfigurableParameter<FlightCo
 	/* Cached data */
 	final protected HashMap<Integer, StageFlags> stages = new HashMap<Integer, StageFlags>();
 	final protected HashMap<MotorConfigurationId, MotorConfiguration> motors = new HashMap<MotorConfigurationId, MotorConfiguration>();
+	final private Collection<MotorConfiguration> activeMotors = new ArrayList<MotorConfiguration>();
 	
 	private int boundsModID = -1;
 	private BoundingBox cachedBounds = new BoundingBox();
@@ -94,7 +96,7 @@ public class FlightConfiguration implements FlightConfigurableParameter<FlightCo
 			this.fcid = _fcid;
 		}
 		this.rocket = rocket;
-		this.configurationName = null;
+		this.configurationName = DEFAULT_CONFIG_NAME;
 		this.configurationInstanceId = configurationInstanceCount++;
 		
 		updateStages();
@@ -108,23 +110,23 @@ public class FlightConfiguration implements FlightConfigurableParameter<FlightCo
 	
 	public void clearAllStages() {
 		this._setAllStages(false);
-		this.updateMotors();
 	}
 	
 	public void setAllStages() {
 		this._setAllStages(true);
-		this.updateMotors();
 	}
 
 	private void _setAllStages(final boolean _active) {
 		for (StageFlags cur : stages.values()) {
 			cur.active = _active;
 		}
+		updateMotors();
 	}
 
 	public void copyStages(FlightConfiguration other) {
 		for (StageFlags cur : other.stages.values())
 			stages.put(cur.stageNumber, new StageFlags(cur.stageNumber, cur.active));
+		updateMotors();
 	}
 	
 	/** 
@@ -134,6 +136,7 @@ public class FlightConfiguration implements FlightConfigurableParameter<FlightCo
 	 */
 	public void clearStage(final int stageNumber) {
 		_setStageActive( stageNumber, false );
+		updateMotors();
 	}
 	
 	/**
@@ -195,7 +198,7 @@ public class FlightConfiguration implements FlightConfigurableParameter<FlightCo
 			flags.active = !flags.active;
 			return;
 		}
-		this.updateMotors();
+		updateMotors();
 		log.error("error: attempt to retrieve via a bad stage number: " + stageNumber);
 	}
 
@@ -208,7 +211,7 @@ public class FlightConfiguration implements FlightConfigurableParameter<FlightCo
 			return true;
 		}
 		
-		return stages.get(stageNumber).active;
+		return stages.get(stageNumber) != null && stages.get(stageNumber).active;
 	}
 
 	public Collection<RocketComponent> getAllComponents() {
@@ -263,7 +266,7 @@ public class FlightConfiguration implements FlightConfigurableParameter<FlightCo
 	
 	// this method is deprecated because it ignores instancing of parent components (e.g. Strapons or pods )
 	// depending on your context, this may or may not be what you want.
-	// recomend migrating to either: `getAllComponents` or `getActiveInstances`
+	// recommend migrating to either: `getAllComponents` or `getActiveInstances`
 	@Deprecated
 	public Collection<RocketComponent> getActiveComponents() {
 		Queue<RocketComponent> toProcess = new ArrayDeque<RocketComponent>(this.getActiveStages());
@@ -414,15 +417,31 @@ public class FlightConfiguration implements FlightConfigurableParameter<FlightCo
 	}
 	
 	public boolean isNameOverridden(){
-		return (null != this.configurationName );
+		return (!DEFAULT_CONFIG_NAME.equals(this.configurationName));
 	}
-	
+
+	/**
+	 * Return the name of this configuration, with DEFAULT_CONFIG_NAME replaced by a one line motor description.
+	 * If configurationName is null, the one line motor description is returned.
+	 * @return the flight configuration name
+	 */
 	public String getName() {
-		if( null == configurationName){
-			return this.getOneLineMotorDescription();
-		}else{
-			return configurationName;
+		if (configurationName == null) {
+			return getOneLineMotorDescription();
 		}
+		return configurationName.replace(DEFAULT_CONFIG_NAME, getOneLineMotorDescription());
+	}
+
+	/**
+	 * Return the raw configuration name, without replacing DEFAULT_CONFIG_NAME.
+	 * If the configurationName is null, DEFAULT_CONFIG_NAME is returned.
+	 * @return raw flight configuration name
+	 */
+	public String getNameRaw() {
+		if (configurationName == null) {
+			return DEFAULT_CONFIG_NAME;
+		}
+		return configurationName;
 	}
 	
 	private String getOneLineMotorDescription(){
@@ -441,7 +460,7 @@ public class FlightConfiguration implements FlightConfigurableParameter<FlightCo
 				}
 				
 				if( ! motorConfig.isEmpty()){
-					buff.append(motorConfig.toMotorDesignation());
+					buff.append(motorConfig.toMotorCommonName());
 					++activeMotorCount;
 				}
 			}
@@ -481,18 +500,12 @@ public class FlightConfiguration implements FlightConfigurableParameter<FlightCo
 	}
 	
 	public Collection<MotorConfiguration> getActiveMotors() {
-		Collection<MotorConfiguration> activeMotors = new ArrayList<MotorConfiguration>();
-		for( MotorConfiguration config : this.motors.values() ){
-			if( isComponentActive( config.getMount() )){
-				activeMotors.add( config );
-			}
-		}
 		
 		return activeMotors;
 	}
 
 	private void updateMotors() {
-		this.motors.clear();
+		motors.clear();
 		
 		for ( RocketComponent comp : getActiveComponents() ){
 			if (( comp instanceof MotorMount )&&( ((MotorMount)comp).isMotorMount())){
@@ -502,10 +515,16 @@ public class FlightConfiguration implements FlightConfigurableParameter<FlightCo
 					continue;
 				}
 				
-				this.motors.put( motorConfig.getMID(), motorConfig);
+				motors.put( motorConfig.getMID(), motorConfig);
 			}
 		}
 		
+		activeMotors.clear();
+		for( MotorConfiguration config : motors.values() ){
+			if( isComponentActive( config.getMount() )){
+				activeMotors.add( config );
+			}
+		}
 	}
 
 	@Override
@@ -699,6 +718,7 @@ public class FlightConfiguration implements FlightConfigurableParameter<FlightCo
         copy.modID = this.modID;
         copy.boundsModID = -1;
         copy.refLengthModID = -1;
+		copy.configurationName = configurationName;
         return copy;
     }
 
@@ -713,9 +733,9 @@ public class FlightConfiguration implements FlightConfigurableParameter<FlightCo
 		return id; 
 	}
 
-	public void setName( final String newName) {
-		if(( null == newName ) ||( "".equals(newName))){
-			this.configurationName = null;
+	public void setName(final String newName) {
+		if ((newName == null) || ("".equals(newName))) {
+			this.configurationName = DEFAULT_CONFIG_NAME;
 			return;
 		}else if( ! this.getId().isValid()){
 			return;

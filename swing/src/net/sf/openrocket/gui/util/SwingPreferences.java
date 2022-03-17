@@ -15,6 +15,7 @@ import java.util.Set;
 import java.util.prefs.BackingStoreException;
 import java.util.prefs.Preferences;
 
+import net.sf.openrocket.communication.AssetHandler.UpdatePlatform;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,7 +43,7 @@ public class SwingPreferences extends net.sf.openrocket.startup.Preferences {
 	private static final List<Locale> SUPPORTED_LOCALES;
 	static {
 		List<Locale> list = new ArrayList<Locale>();
-		for (String lang : new String[] { "en", "de", "es", "fr", "it", "ru", "cs", "pl", "ja", "pt", "tr" }) {
+		for (String lang : new String[] { "en", "de", "es", "fr", "it", "nl", "ru", "cs", "pl", "ja", "pt", "tr" }) {
 			list.add(new Locale(lang));
 		}
 		list.add(new Locale("zh", "CN"));
@@ -247,7 +248,18 @@ public class SwingPreferences extends net.sf.openrocket.startup.Preferences {
 		}
 		return compdir;
 	}
-	
+
+	public void setUpdatePlatform(UpdatePlatform platform) {
+		if (platform == null) return;
+		putString("UpdatePlatform", platform.name());
+	}
+
+	public UpdatePlatform getUpdatePlatform() {
+		String p = getString("UpdatePlatform", SystemInfo.getPlatform().name());
+		if (p == null) return null;
+		return UpdatePlatform.valueOf(p);
+	}
+
 	/**
 	 * Return a list of files/directories to be loaded as custom thrust curves.
 	 * <p>

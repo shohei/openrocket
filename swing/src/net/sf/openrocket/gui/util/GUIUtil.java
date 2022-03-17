@@ -1,14 +1,6 @@
 package net.sf.openrocket.gui.util;
 
-import java.awt.Component;
-import java.awt.Container;
-import java.awt.Dimension;
-import java.awt.Font;
-import java.awt.Image;
-import java.awt.KeyboardFocusManager;
-import java.awt.Point;
-import java.awt.Toolkit;
-import java.awt.Window;
+import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.ComponentAdapter;
@@ -165,9 +157,22 @@ public class GUIUtil {
 	 * @param dialog	the dialog for which to install the action.
 	 */
 	public static void installEscapeCloseOperation(final JDialog dialog) {
+		installEscapeCloseOperation(dialog, null);
+	}
+
+	/**
+	 * Add the correct action to close a JDialog when the ESC key is pressed.
+	 * The dialog is closed by sending it a WINDOW_CLOSING event.
+	 *
+	 * An additional action can be passed which will be executed upon the close action key.
+	 *
+	 * @param dialog	the dialog for which to install the action.
+	 * @param action	action to execute upon the close action
+	 */
+	public static void installEscapeCloseOperation(final JDialog dialog, Action action) {
 		Action dispatchClosing = new AbstractAction() {
 			/**
-			 * 
+			 *
 			 */
 			private static final long serialVersionUID = 9196153713666242274L;
 
@@ -180,6 +185,9 @@ public class GUIUtil {
 		JRootPane root = dialog.getRootPane();
 		root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(ESCAPE, CLOSE_ACTION_KEY);
 		root.getActionMap().put(CLOSE_ACTION_KEY, dispatchClosing);
+		if (action != null) {
+			root.getActionMap().put(CLOSE_ACTION_KEY, action);
+		}
 	}
 	
 	
@@ -284,6 +292,8 @@ public class GUIUtil {
 					}
 				}
 			}
+			// Set the select foreground for buttons to not be black on a blue background
+			UIManager.put("Button.selectForeground", Color.WHITE);
 		} catch (Exception e) {
 			log.warn("Error setting LAF: " + e);
 		}

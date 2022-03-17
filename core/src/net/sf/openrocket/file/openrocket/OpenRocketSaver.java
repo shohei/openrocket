@@ -5,11 +5,9 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Locale;
+import java.util.*;
 
+import net.sf.openrocket.file.openrocket.savers.PhotoStudioSaver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -102,6 +100,9 @@ public class OpenRocketSaver extends RocketSaver {
 		}
 		indent--;
 		writeln("</simulations>");
+
+		// Save PhotoSettings
+		savePhotoSettings(document.getPhotoSettings());
 		
 		indent--;
 		writeln("</openrocket>");
@@ -233,7 +234,7 @@ public class OpenRocketSaver extends RocketSaver {
 	
 	
 	/**
-	 * Finds a getElements method somewhere in the *saver class hiearchy corresponding to the given component. 
+	 * Finds a getElements method somewhere in the *saver class hierarchy corresponding to the given component.
 	 */
 	private static Reflection.Method findGetElementsMethod(RocketComponent component) {
 		String currentclassname;
@@ -317,8 +318,11 @@ public class OpenRocketSaver extends RocketSaver {
 	
 	private void saveSimulation(Simulation simulation, double timeSkip) throws IOException {
 		SimulationOptions cond = simulation.getOptions();
-		
-		writeln("<simulation status=\"" + enumToXMLName(simulation.getStatus()) + "\">");
+
+		Simulation.Status simStatus;
+		simStatus = timeSkip != StorageOptions.SIMULATION_DATA_NONE ? simulation.getStatus() : Simulation.Status.NOT_SIMULATED;
+
+		writeln("<simulation status=\"" + enumToXMLName(simStatus) + "\">");
 		indent++;
 		
 		writeln("<name>" + TextUtil.escapeXML(simulation.getName()) + "</name>");
@@ -420,6 +424,12 @@ public class OpenRocketSaver extends RocketSaver {
 		indent--;
 		writeln("</simulation>");
 		
+	}
+
+	private void savePhotoSettings(Map<String, String> p) throws IOException {
+		log.debug("Saving Photo Settings");
+		for (String s : PhotoStudioSaver.getElements(p))
+			writeln(s);
 	}
 	
 	

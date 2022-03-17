@@ -18,6 +18,7 @@ import net.sf.openrocket.l10n.Translator;
 import net.sf.openrocket.motor.ThrustCurveMotor;
 import net.sf.openrocket.startup.Application;
 import net.sf.openrocket.unit.UnitGroup;
+import net.sf.openrocket.gui.widgets.SelectColorButton;
 
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.ChartPanel;
@@ -75,7 +76,9 @@ public class ThrustCurveMotorPlotDialog extends JDialog {
 
 		// Create the plot data set
 		XYSeriesCollection dataset = new XYSeriesCollection();
-		
+
+		// Add data series for selected curve first, so it will
+		// render "on top" of the other curves
 		// Selected thrust curve
 		int n = 0;
 		if (selected >= 0) {
@@ -91,7 +94,7 @@ public class ThrustCurveMotorPlotDialog extends JDialog {
 				continue;
 			
 			ThrustCurveMotor m = motors.get(i);
-			dataset.addSeries(generateSeries(m, i));
+			dataset.addSeries(generateSeries(m, n));
 			renderer.setSeriesStroke(n, new BasicStroke(1.5f));
 			renderer.setSeriesPaint(n, ThrustCurveMotorSelectionPanel.getColor(i));
 			renderer.setSeriesShape(n, new Rectangle());
@@ -104,7 +107,7 @@ public class ThrustCurveMotorPlotDialog extends JDialog {
 		
 
 		// Close button
-		JButton close = new JButton(trans.get("dlg.but.close"));
+		JButton close = new SelectColorButton(trans.get("dlg.but.close"));
 		close.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {

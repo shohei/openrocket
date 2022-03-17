@@ -1,10 +1,13 @@
 package net.sf.openrocket.rocketcomponent;
 
 import java.awt.geom.Point2D;
+import java.util.*;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
+
+
+import net.sf.openrocket.util.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import net.sf.openrocket.l10n.Translator;
 import net.sf.openrocket.material.Material;
@@ -14,15 +17,11 @@ import net.sf.openrocket.rocketcomponent.position.AxialMethod;
 import net.sf.openrocket.rocketcomponent.position.AxialPositionable;
 import net.sf.openrocket.rocketcomponent.position.RadiusMethod;
 import net.sf.openrocket.startup.Application;
-import net.sf.openrocket.util.BoundingBox;
 
 import net.sf.openrocket.rocketcomponent.Transition.Shape;
 
-import net.sf.openrocket.util.Coordinate;
-import net.sf.openrocket.util.MathUtil;
-import net.sf.openrocket.util.Transformation;
-
-public abstract class FinSet extends ExternalComponent implements AxialPositionable, BoxBounded, RingInstanceable {
+public abstract class FinSet extends ExternalComponent implements AxialPositionable, BoxBounded, RingInstanceable, InsideColorComponent {
+	private static final Logger log = LoggerFactory.getLogger(FinSet.class);
 	private static final Translator trans = Application.getTranslator();
 
 	/**
@@ -102,7 +101,7 @@ public abstract class FinSet extends ExternalComponent implements AxialPositiona
 	private static final double minimumTabArea = 1e-8;
 	private double tabHeight = 0;
 	private double tabLength = 0.05;
-	// this is always measured from the the root-lead point.
+	// this is always measured from the root-lead point.
 	private double tabPosition = 0.0;
 	private AxialMethod tabOffsetMethod = AxialMethod.MIDDLE;
 	private double tabOffset = 0.;
@@ -120,6 +119,8 @@ public abstract class FinSet extends ExternalComponent implements AxialPositiona
 	private double singlePlanformArea = Double.NaN;
 	private double totalVolume = Double.NaN;
 	private Coordinate centerOfMass = Coordinate.NaN;
+
+	private final InsideColorComponentHandler insideColorComponentHandler = new InsideColorComponentHandler(this);
 	
 	/**
 	 * New FinSet with given number of fins and given base rotation angle.
@@ -129,6 +130,8 @@ public abstract class FinSet extends ExternalComponent implements AxialPositiona
 	public FinSet() {
 		super( AxialMethod.BOTTOM);
 		this.filletMaterial = Application.getPreferences().getDefaultComponentMaterial(this.getClass(), Material.Type.BULK);
+		super.displayOrder_side = 4;		// Order for displaying the component in the 2D side view
+		super.displayOrder_back = 4;		// Order for displaying the component in the 2D back view
 	}
 	
 	@Override
@@ -149,6 +152,12 @@ public abstract class FinSet extends ExternalComponent implements AxialPositiona
 	 * @param n The number of fins, greater of equal to one.
 	 */
 	public void setFinCount(int n) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof FinSet) {
+				((FinSet) listener).setFinCount(n);
+			}
+		}
+
 		if (finCount == n)
 			return;
 		if (n < 1)
@@ -184,6 +193,12 @@ public abstract class FinSet extends ExternalComponent implements AxialPositiona
 	 * @param r The base rotation in radians
 	 */
 	public void setBaseRotation(double r) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof FinSet) {
+				((FinSet) listener).setBaseRotation(r);
+			}
+		}
+
 		setAngleOffset(r);
 	}
 	
@@ -199,6 +214,12 @@ public abstract class FinSet extends ExternalComponent implements AxialPositiona
 	 * @param newCantRadians -- new cant angle, in radians
 	 */
 	public void setCantAngle(final double newCantRadians) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof FinSet) {
+				((FinSet) listener).setCantAngle(newCantRadians);
+			}
+		}
+
 		final double clampedCant = MathUtil.clamp(newCantRadians, -MAX_CANT_RADIANS, MAX_CANT_RADIANS);
 		if (MathUtil.equals(clampedCant, this.cantRadians))
 			return;
@@ -223,6 +244,12 @@ public abstract class FinSet extends ExternalComponent implements AxialPositiona
 	}
 	
 	public void setThickness(double r) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof FinSet) {
+				((FinSet) listener).setThickness(r);
+			}
+		}
+
 		if (thickness == r)
 			return;
 		thickness = Math.max(r, 0);
@@ -235,6 +262,12 @@ public abstract class FinSet extends ExternalComponent implements AxialPositiona
 	}
 	
 	public void setCrossSection(CrossSection cs) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof FinSet) {
+				((FinSet) listener).setCrossSection(cs);
+			}
+		}
+
 		if (crossSection == cs)
 			return;
 		crossSection = cs;
@@ -262,12 +295,18 @@ public abstract class FinSet extends ExternalComponent implements AxialPositiona
 	 * 
 	 */
 	public void setTabHeight(final double newTabHeight) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof FinSet) {
+				((FinSet) listener).setTabHeight(newTabHeight);
+			}
+		}
+
 		if (MathUtil.equals(this.tabHeight, MathUtil.max(newTabHeight, 0))){
 			return;
 		}
 		
 		tabHeight = newTabHeight;
-
+		validateFinTabHeight();
 		fireComponentChangeEvent(ComponentChangeEvent.MASS_CHANGE);
 	}
 	
@@ -280,13 +319,25 @@ public abstract class FinSet extends ExternalComponent implements AxialPositiona
 	 * set tab length
 	 */
 	public void setTabLength(final double lengthRequest) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof FinSet) {
+				((FinSet) listener).setTabLength(lengthRequest);
+			}
+		}
+
 		if (MathUtil.equals(tabLength, MathUtil.max(lengthRequest, 0))) {
 			return;
 		}
 		
 		tabLength = lengthRequest;
 		
+		updateTabPosition();
+		
 		fireComponentChangeEvent(ComponentChangeEvent.MASS_CHANGE);
+	}
+
+	public void updateTabPosition(){
+		this.tabPosition = this.tabOffsetMethod.getAsPosition(tabOffset, tabLength, length);
 	}
 	
 	/** 
@@ -295,8 +346,14 @@ public abstract class FinSet extends ExternalComponent implements AxialPositiona
 	 * @param offsetRequest new requested tab offset
 	 */
 	public void setTabOffset( final double offsetRequest) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof FinSet) {
+				((FinSet) listener).setTabOffset(offsetRequest);
+			}
+		}
+
 		tabOffset = offsetRequest;
-		tabPosition = tabOffsetMethod.getAsPosition( tabOffset, tabLength, length);
+		updateTabPosition();
 		
 		fireComponentChangeEvent(ComponentChangeEvent.MASS_CHANGE);
 	}
@@ -310,8 +367,16 @@ public abstract class FinSet extends ExternalComponent implements AxialPositiona
 	 * it is merely a lens through which other modules may view the tab's position.
      */
 	public void setTabOffsetMethod(final AxialMethod newPositionMethod) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof FinSet) {
+				((FinSet) listener).setTabOffsetMethod(newPositionMethod);
+			}
+		}
+
 		this.tabOffsetMethod = newPositionMethod;
-		this.tabOffset = tabOffsetMethod.getAsOffset( tabPosition, tabLength, length);
+		this.tabOffset = this.tabOffsetMethod.getAsOffset(tabPosition, tabLength, length);
+		
+		fireComponentChangeEvent(ComponentChangeEvent.NONFUNCTIONAL_CHANGE);
 	}
 	
 	/**
@@ -328,29 +393,36 @@ public abstract class FinSet extends ExternalComponent implements AxialPositiona
 	/**
 	 * Return the tab trailing edge position *from the front of the fin*.
 	 */
-	private double getTabTrailingEdge() {
+	public double getTabTrailingEdge() {
 		return tabPosition + tabLength;
 	}
 	
-	public void validateFinTab(){
-		this.tabPosition = this.tabOffsetMethod.getAsPosition(tabOffset, tabLength, length);
-
+	public void validateFinTabPosition() {
 		//check front bounds:
-		if( tabPosition < 0){
+		if (tabPosition < 0) {
 			this.tabPosition = 0;
 		}
 
 		//check tail bounds:
-		if (this.length < tabPosition ) {
+		if (this.length < tabPosition) {
 			this.tabPosition = length;
 		}
+	}
+	
+	public void validateFinTabLength() {
+		//System.err.println(String.format("    >> Fin Tab Length: %.6f @ %.6f", tabLength, tabOffset));
+		
 		final double xTabBack = getTabTrailingEdge();
-		if( this.length < xTabBack ){
+		if (this.length < xTabBack) {
 			this.tabLength -= (xTabBack - this.length);
 		}
-
+		
 		tabLength = Math.max(0, tabLength);
-
+		
+		//System.err.println(String.format("    << Fin Tab Length: %.6f @ %.6f", tabLength, tabOffset));
+	}
+	
+	public void validateFinTabHeight(){
 		// check tab height 
 		if( null != getParent() ){
 			// pulls the parent-body radius at the fin-tab reference point.
@@ -785,6 +857,7 @@ public abstract class FinSet extends ExternalComponent implements AxialPositiona
 			this.totalVolume = Double.NaN;
 			this.cantRotation = null;
 		}
+		
 		super.componentChanged(e);
 	}
 	
@@ -831,11 +904,7 @@ public abstract class FinSet extends ExternalComponent implements AxialPositiona
 		
 	public boolean isRootStraight( ){
         if( getParent() instanceof Transition){
-            if( ((Transition)getParent()).getType() == Transition.Shape.CONICAL ){
-                return true;
-            }else{
-                return false;
-            }
+			return ((Transition) getParent()).getType() == Shape.CONICAL;
         }
         
         // by default, assume a flat base
@@ -892,7 +961,7 @@ public abstract class FinSet extends ExternalComponent implements AxialPositiona
 			return new Coordinate[]{};
 		}
 	
-		final int pointCount = 4;
+		final int pointCount = 5;
 		Coordinate[] points = new Coordinate[pointCount];
 		final Coordinate finFront = this.getFinFront();
 		
@@ -915,6 +984,7 @@ public abstract class FinSet extends ExternalComponent implements AxialPositiona
 		points[1] = new Coordinate(xTabFront, yTabBottom );
 		points[2] = new Coordinate(xTabTrail, yTabBottom );
 		points[3] = new Coordinate(xTabTrail, yTabTrail);
+		points[4] = new Coordinate(xTabFront, yTabFront);
 
 		return points;
 	}
@@ -946,6 +1016,12 @@ public abstract class FinSet extends ExternalComponent implements AxialPositiona
 
 	@Override
 	public void setAngleOffset(final double angleRadians) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof FinSet) {
+				((FinSet) listener).setAngleOffset(angleRadians);
+			}
+		}
+
 		final double reducedAngle = MathUtil.reducePi(angleRadians);
 		if (MathUtil.equals(reducedAngle, firstFinOffsetRadians))
 			return;
@@ -984,6 +1060,12 @@ public abstract class FinSet extends ExternalComponent implements AxialPositiona
 
 	@Override
 	public void setAngleMethod(AngleMethod newAngleMethod ) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof FinSet) {
+				((FinSet) listener).setAngleMethod(newAngleMethod);
+			}
+		}
+
 		mutex.verify();
 		this.angleMethod = newAngleMethod;
 		fireComponentChangeEvent(ComponentChangeEvent.BOTH_CHANGE);
@@ -1012,6 +1094,12 @@ public abstract class FinSet extends ExternalComponent implements AxialPositiona
 
 	@Override
 	public void setInstanceCount(int newCount) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof FinSet) {
+				((FinSet) listener).setInstanceCount(newCount);
+			}
+		}
+
 		setFinCount(newCount);
 	}
 
@@ -1059,6 +1147,12 @@ public abstract class FinSet extends ExternalComponent implements AxialPositiona
 	}
 	
 	public void setFilletMaterial(Material mat) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof FinSet) {
+				((FinSet) listener).setFilletMaterial(mat);
+			}
+		}
+
 		if (mat.getType() != Material.Type.BULK) {
 			throw new IllegalArgumentException("ExternalComponent requires a bulk material" +
 					" type=" + mat.getType());
@@ -1076,6 +1170,12 @@ public abstract class FinSet extends ExternalComponent implements AxialPositiona
 	}
 	
 	public void setFilletRadius(double r) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof FinSet) {
+				((FinSet) listener).setFilletRadius(r);
+			}
+		}
+
 		if (MathUtil.equals(filletRadius, r))
 			return;
 		filletRadius = r;
@@ -1157,7 +1257,7 @@ public abstract class FinSet extends ExternalComponent implements AxialPositiona
 
 		// correct last point, if beyond a rounding error from body's end.
 		final int lastIndex = points.length - 1;
-		if( body.getLength()-0.000001 < points[lastIndex].x) {
+		if (Math.abs(points[lastIndex].x - body.getLength()) < 0.000001) {
 			points[lastIndex] = points[lastIndex].setX(body.getLength()).setY(body.getAftRadius());
 		}
 
@@ -1260,5 +1360,10 @@ public abstract class FinSet extends ExternalComponent implements AxialPositiona
 		}
 		
 		return toReturn;
+	}
+
+	@Override
+	public InsideColorComponentHandler getInsideColorComponentHandler() {
+		return this.insideColorComponentHandler;
 	}
 }

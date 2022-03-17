@@ -4,35 +4,48 @@ import java.awt.CardLayout;
 import java.awt.Dimension;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.FocusEvent;
+import java.awt.event.FocusListener;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.List;
 
+import javax.swing.BorderFactory;
+import javax.swing.AbstractAction;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
+import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
+import javax.swing.event.ListSelectionEvent;
+import javax.swing.event.ListSelectionListener;
 import javax.swing.event.TableModelEvent;
 import javax.swing.event.TableModelListener;
 
 import net.miginfocom.swing.MigLayout;
-import net.sf.openrocket.gui.components.StyledLabel;
-import net.sf.openrocket.gui.components.StyledLabel.Style;
 import net.sf.openrocket.gui.dialogs.flightconfiguration.IgnitionSelectionDialog;
 import net.sf.openrocket.gui.dialogs.flightconfiguration.MotorMountConfigurationPanel;
 import net.sf.openrocket.gui.dialogs.motor.MotorChooserDialog;
+import net.sf.openrocket.gui.widgets.SelectColorButton;
 import net.sf.openrocket.motor.IgnitionEvent;
 import net.sf.openrocket.motor.Motor;
 import net.sf.openrocket.motor.MotorConfiguration;
-import net.sf.openrocket.rocketcomponent.FlightConfiguration;
+import net.sf.openrocket.rocketcomponent.BodyTube;
+import net.sf.openrocket.rocketcomponent.ComponentChangeEvent;
 import net.sf.openrocket.rocketcomponent.FlightConfigurationId;
+import net.sf.openrocket.rocketcomponent.InnerTube;
 import net.sf.openrocket.rocketcomponent.MotorMount;
 import net.sf.openrocket.rocketcomponent.Rocket;
+import net.sf.openrocket.rocketcomponent.RocketComponent;
 import net.sf.openrocket.unit.UnitGroup;
+import net.sf.openrocket.util.ArrayList;
 import net.sf.openrocket.util.Chars;
 
 @SuppressWarnings("serial")
@@ -50,71 +63,88 @@ public class MotorConfigurationPanel extends FlightConfigurablePanel<MotorMount>
 	protected FlightConfigurableTableModel<MotorMount> configurationTableModel;
 
 	MotorConfigurationPanel(final FlightConfigurationPanel flightConfigurationPanel, Rocket rocket) {
-		super(flightConfigurationPanel,rocket);
+		super(flightConfigurationPanel, rocket);
 
 		motorChooserDialog = new MotorChooserDialog(SwingUtilities.getWindowAncestor(flightConfigurationPanel));
 
 		{
 			//// Select motor mounts
-			JPanel subpanel = new JPanel(new MigLayout(""));
-			JLabel label = new StyledLabel(trans.get("lbl.motorMounts"), Style.BOLD);
-			subpanel.add(label, "wrap");
+			JPanel subpanel = new JPanel(new MigLayout("inset 0, fill"));
+			subpanel.setBorder(BorderFactory.createTitledBorder(
+					BorderFactory.createEtchedBorder(),
+					"<html><b>" + trans.get("lbl.motorMounts") + "</b></html>"));
 
-			MotorMountConfigurationPanel mountConfigPanel = new MotorMountConfigurationPanel(this,rocket);
+			MotorMountConfigurationPanel mountConfigPanel = new MotorMountConfigurationPanel(this, rocket);
 			subpanel.add(mountConfigPanel, "grow");
-			this.add(subpanel, "split, w 200lp, growy");
+			this.add(subpanel, "split, growy");
 		}
 
 		cards = new JPanel(new CardLayout());
-		this.add( cards );
-		
+		this.add(cards);
+
 		JLabel helpText = new JLabel(trans.get("MotorConfigurationPanel.lbl.nomotors"));
 		cards.add(helpText, HELP_LABEL );
-		
+
+		JPanel configurationPanel = new JPanel(new MigLayout("fill, insets n n 5px n"));
+		configurationPanel.setBorder(BorderFactory.createTitledBorder(
+				BorderFactory.createEtchedBorder(),
+				"<html><b>" + trans.get("MotorConfigurationPanel.lbl.motorConfiguration") + "</b></html>"));
 		JScrollPane scroll = new JScrollPane(table);
-		cards.add(scroll, TABLE_LABEL );
-		
-		this.add(cards, "grow, wrap");
+		configurationPanel.add(scroll, "spanx, grow, wrap");
 
 		//// Select motor
-		selectMotorButton = new JButton(trans.get("MotorConfigurationPanel.btn.selectMotor"));
+		selectMotorButton = new SelectColorButton(trans.get("MotorConfigurationPanel.btn.selectMotor"));
 		selectMotorButton.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				selectMotor();
 			}
 		});
-		this.add(selectMotorButton, "split, align right, sizegroup button");
+		configurationPanel.add(selectMotorButton, "split, align right, sizegroup button");
 
 		//// Remove motor button
-		removeMotorButton = new JButton(trans.get("MotorConfigurationPanel.btn.removeMotor"));
+		removeMotorButton = new SelectColorButton(trans.get("MotorConfigurationPanel.btn.removeMotor"));
 		removeMotorButton.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				removeMotor();
 			}
 		});
-		this.add(removeMotorButton, "sizegroup button");
+		configurationPanel.add(removeMotorButton, "sizegroup button");
 
 		//// Select Ignition button
-		selectIgnitionButton = new JButton(trans.get("MotorConfigurationPanel.btn.selectIgnition"));
+		selectIgnitionButton = new SelectColorButton(trans.get("MotorConfigurationPanel.btn.selectIgnition"));
 		selectIgnitionButton.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				selectIgnition();
 			}
 		});
-		this.add(selectIgnitionButton, "sizegroup button");
+		configurationPanel.add(selectIgnitionButton, "sizegroup button");
 
 		//// Reset Ignition button
-		resetIgnitionButton = new JButton(trans.get("MotorConfigurationPanel.btn.resetIgnition"));
+		resetIgnitionButton = new SelectColorButton(trans.get("MotorConfigurationPanel.btn.resetIgnition"));
 		resetIgnitionButton.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				resetIgnition();
 			}
 		});
-		this.add(resetIgnitionButton, "sizegroup button, wrap");
+		configurationPanel.add(resetIgnitionButton, "sizegroup button, wrap");
+
+		cards.add(configurationPanel, TABLE_LABEL );
+
+		this.add(cards, "gapleft para, grow, wrap");
+
+		// Set 'Enter' key action to open the motor selection dialog
+		table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(
+				KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "Enter");
+		table.getActionMap().put("Enter", new AbstractAction() {
+			@Override
+			public void actionPerformed(ActionEvent ae) {
+				selectMotor();
+			}
+		});
 
 		updateButtonState();
 
@@ -136,6 +166,15 @@ public class MotorConfigurationPanel extends FlightConfigurablePanel<MotorMount>
 			protected boolean includeComponent(MotorMount component) {
 				return component.isMotorMount();
 			}
+
+			@Override
+			public void componentChanged(ComponentChangeEvent cce) {
+				super.componentChanged(cce);
+				// This will catch a name change to cause a change in the header of the table
+				if ((cce.getSource() instanceof BodyTube || cce.getSource() instanceof InnerTube) && cce.isNonFunctionalChange()) {
+					fireTableStructureChanged();
+				}
+			}
 		};
 		
 		// Listen to changes to the table so we can disable the help text when a
@@ -152,7 +191,7 @@ public class MotorConfigurationPanel extends FlightConfigurablePanel<MotorMount>
 		JTable configurationTable = new JTable(configurationTableModel);
 		configurationTable.getTableHeader().setReorderingAllowed(false);
 		configurationTable.setCellSelectionEnabled(true);
-		configurationTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		configurationTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
 		configurationTable.setDefaultRenderer(Object.class, new MotorTableCellRenderer());
 
 		configurationTable.addMouseListener(new MouseAdapter() {
@@ -169,6 +208,46 @@ public class MotorConfigurationPanel extends FlightConfigurablePanel<MotorMount>
 		});
 		
 		return configurationTable;
+	}
+
+	@Override
+	protected void installTableListener() {
+		super.installTableListener();
+
+		table.getColumnModel().getSelectionModel().addListSelectionListener(new ListSelectionListener() {
+			@Override
+			public void valueChanged(ListSelectionEvent e) {
+				updateComponentSelection(e);
+			}
+		});
+
+		table.addFocusListener(new FocusListener() {
+			@Override
+			public void focusGained(FocusEvent e) {
+				updateComponentSelection(new ListSelectionEvent(this, 0, 0, false));
+			}
+
+			@Override
+			public void focusLost(FocusEvent e) {
+
+			}
+		});
+	}
+
+	public void updateComponentSelection(ListSelectionEvent e) {
+		if (e.getValueIsAdjusting()) {
+			return;
+		}
+		List<MotorMount> mounts = getSelectedComponents();
+		if (mounts == null || mounts.size() == 0) return;
+		List<RocketComponent> components = new ArrayList<>();
+		for (MotorMount mount : mounts) {
+			if (mount instanceof RocketComponent) {
+				components.add((RocketComponent) mount);
+			}
+		}
+
+		flightConfigurationPanel.setSelectedComponents(components);
 	}
 
 	protected void updateButtonState() {
@@ -189,74 +268,143 @@ public class MotorConfigurationPanel extends FlightConfigurablePanel<MotorMount>
 		}
 	}
 
-	private void selectMotor() {
-		MotorMount curMount = getSelectedComponent();		
-		FlightConfigurationId fcid= getSelectedConfigurationId();
-        if ( (null == fcid )||( null == curMount )){
-            return;
-        }
+	public void selectMotor() {
+		List<MotorMount> mounts = getSelectedComponents();
+		List<FlightConfigurationId> fcIds = getSelectedConfigurationIds();
+		if ((mounts == null) || (fcIds == null) || mounts.size() == 0 || fcIds.size() == 0) {
+			return;
+		}
 
-        if( fcid.equals( FlightConfigurationId.DEFAULT_VALUE_FCID)){
-        	throw new IllegalStateException("Attempting to set a motor on the default FCID.");
-        }
+		boolean update = false;
+		MotorMount initMount = mounts.get(0);
+		FlightConfigurationId initFcId = fcIds.get(0);
 
-		motorChooserDialog.setMotorMountAndConfig( fcid, curMount );
-		motorChooserDialog.setVisible(true);
+		for (FlightConfigurationId fcId : fcIds) {
+			if (fcId.equals( FlightConfigurationId.DEFAULT_VALUE_FCID)) {
+				throw new IllegalStateException("Attempting to set a motor on the default FCID.");
+			}
+		}
+
+        double initDelay = initMount.getMotorConfig(initFcId).getEjectionDelay();
+
+		motorChooserDialog.setMotorMountAndConfig(initFcId, initMount);
+		motorChooserDialog.open();
 
         Motor mtr = motorChooserDialog.getSelectedMotor();
 		double d = motorChooserDialog.getSelectedDelay();
+
+
 		if (mtr != null) {
-	        final MotorConfiguration templateConfig = curMount.getMotorConfig(fcid);
-	        final MotorConfiguration newConfig = new MotorConfiguration( curMount, fcid, templateConfig);
-	        newConfig.setMotor(mtr);
-			newConfig.setEjectionDelay(d);
-			curMount.setMotorConfig( newConfig, fcid);
+			for (MotorMount mount : mounts) {
+				for (FlightConfigurationId fcId : fcIds) {
+					if (mtr != mount.getMotorConfig(fcId).getMotor() || d != initDelay) {
+						update = true;
+
+						final MotorConfiguration templateConfig = mount.getMotorConfig(fcId);
+						final MotorConfiguration newConfig = new MotorConfiguration(mount, fcId, templateConfig);
+						newConfig.setMotor(mtr);
+						newConfig.setEjectionDelay(d);
+						mount.setMotorConfig(newConfig, fcId);
+					}
+				}
+			}
 		}
 
-		fireTableDataChanged();
+		if (update) {
+			fireTableDataChanged(ComponentChangeEvent.MOTOR_CHANGE);
+		}
 	}
 
 	private void removeMotor() {
-		MotorMount curMount = getSelectedComponent();		
-		FlightConfigurationId fcid= getSelectedConfigurationId();
-        if ( (null == fcid )||( null == curMount )){
+		List<MotorMount> mounts = getSelectedComponents();
+		List<FlightConfigurationId> fcIds = getSelectedConfigurationIds();
+		if ((mounts == null) || (fcIds == null) || mounts.size() == 0 || fcIds.size() == 0) {
             return;
         }
-        
-        curMount.setMotorConfig( null, fcid); 
+
+		for (MotorMount mount : mounts) {
+			for (FlightConfigurationId fcId : fcIds) {
+				mount.setMotorConfig(null, fcId);
+			}
+		}
 		
-		fireTableDataChanged();
+		fireTableDataChanged(ComponentChangeEvent.MOTOR_CHANGE);
 	}
 
 	private void selectIgnition() {
-		MotorMount curMount = getSelectedComponent();		
-		FlightConfigurationId fcid= getSelectedConfigurationId();
-        if ( (null == fcid )||( null == curMount )){
-            return;
-        }
-        
+		List<MotorMount> mounts = getSelectedComponents();
+		List<FlightConfigurationId> fcIds = getSelectedConfigurationIds();
+		if ((mounts == null) || (fcIds == null) || mounts.size() == 0 || fcIds.size() == 0) {
+			return;
+		}
+
+		boolean update = false;
+		MotorMount initMount = mounts.get(0);
+		FlightConfigurationId initFcId = fcIds.get(0);
+
+		MotorConfiguration initConfig = initMount.getMotorConfig(initFcId);
+		IgnitionEvent initialIgnitionEvent = initConfig.getIgnitionEvent();
+		double initialIgnitionDelay = initConfig.getIgnitionDelay();
+
 		// this call also performs the update changes
 		IgnitionSelectionDialog ignitionDialog = new IgnitionSelectionDialog(
 				SwingUtilities.getWindowAncestor(this.flightConfigurationPanel),
-				fcid,
-				curMount);
+				initFcId,
+				initMount);
 		ignitionDialog.setVisible(true);
-				
-		fireTableDataChanged();
+
+		if (!initialIgnitionEvent.equals(initConfig.getIgnitionEvent()) || (initialIgnitionDelay != initConfig.getIgnitionDelay())) {
+			update = true;
+		}
+
+		for (int i = 0; i < mounts.size(); i++) {
+			for (int j = 0; j < fcIds.size(); j++) {
+				if ((i == 0) && (j == 0)) break;
+
+				MotorConfiguration config = mounts.get(i).getMotorConfig(fcIds.get(j));
+				initialIgnitionEvent = config.getIgnitionEvent();
+				initialIgnitionDelay = config.getIgnitionDelay();
+
+				config.setIgnitionEvent(initConfig.getIgnitionEvent());
+				config.setIgnitionDelay(initConfig.getIgnitionDelay());
+
+				if (!initialIgnitionEvent.equals(config.getIgnitionEvent()) || (initialIgnitionDelay != config.getIgnitionDelay())) {
+					update = true;
+				}
+			}
+		}
+
+		if (update) {
+			fireTableDataChanged(ComponentChangeEvent.MOTOR_CHANGE);
+		}
 	}
 
 
 	private void resetIgnition() {
-		MotorMount curMount = getSelectedComponent();		
-		FlightConfigurationId fcid= getSelectedConfigurationId();
-        if ( (null == fcid )||( null == curMount )){
-            return;
-        }
-        MotorConfiguration curInstance = curMount.getMotorConfig(fcid);
-		
-        curInstance.useDefaultIgnition();
+		List<MotorMount> mounts = getSelectedComponents();
+		List<FlightConfigurationId> fcIds = getSelectedConfigurationIds();
+		if ((mounts == null) || (fcIds == null) || mounts.size() == 0 || fcIds.size() == 0) {
+			return;
+		}
 
-		fireTableDataChanged();
+		boolean update = false;
+		for (MotorMount mount : mounts) {
+			for (FlightConfigurationId fcId : fcIds) {
+				MotorConfiguration config = mount.getMotorConfig(fcId);
+				IgnitionEvent initialIgnitionEvent = config.getIgnitionEvent();
+				double initialIgnitionDelay = config.getIgnitionDelay();
+
+				config.useDefaultIgnition();
+
+				if (!initialIgnitionEvent.equals(config.getIgnitionEvent()) || (initialIgnitionDelay != config.getIgnitionDelay())) {
+					update = true;
+				}
+			}
+		}
+
+		if (update) {
+			fireTableDataChanged(ComponentChangeEvent.MOTOR_CHANGE);
+		}
 	}
 
 
@@ -290,7 +438,7 @@ public class MotorConfigurationPanel extends FlightConfigurablePanel<MotorMount>
 				throw new NullPointerException("Motor has a null mount... this should never happen: "+curMotorInstance.getID());
 			}
 
-			String str = motor.getDesignation(curMotorInstance.getEjectionDelay());
+			String str = motor.getCommonName(curMotorInstance.getEjectionDelay());
 			int count = mount.getInstanceCount();
 			if (count > 1) {
 				str = "" + count + Chars.TIMES + " " + str;

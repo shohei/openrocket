@@ -5,23 +5,27 @@ import static net.sf.openrocket.util.MathUtil.pow2;
 import static net.sf.openrocket.util.MathUtil.pow3;
 
 import java.util.Collection;
+import java.util.EventObject;
 
+import net.sf.openrocket.appearance.Appearance;
+import net.sf.openrocket.appearance.Decal;
 import net.sf.openrocket.l10n.Translator;
 import net.sf.openrocket.preset.ComponentPreset;
 import net.sf.openrocket.preset.ComponentPreset.Type;
 import net.sf.openrocket.startup.Application;
 import net.sf.openrocket.util.Coordinate;
 import net.sf.openrocket.util.MathUtil;
+import net.sf.openrocket.util.StateChangeListener;
 
 
-public class Transition extends SymmetricComponent {
+public class Transition extends SymmetricComponent implements InsideColorComponent {
 	private static final Translator trans = Application.getTranslator();
 	private static final double CLIP_PRECISION = 0.0001;
 
 
 	private Shape type;
 	private double shapeParameter;
-	private boolean clipped; // Not to be read - use isClipped(), which may be overriden
+	private boolean clipped; // Not to be read - use isClipped(), which may be overridden
 
 	private double foreRadius, aftRadius;
 	private boolean autoForeRadius, autoAftRadius2; // Whether the start radius is automatic
@@ -40,6 +44,8 @@ public class Transition extends SymmetricComponent {
 	// Used to cache the clip length
 	private double clipLength = -1;
 
+	private final InsideColorComponentHandler insideColorComponentHandler = new InsideColorComponentHandler(this);
+
 	public Transition() {
 		super();
 
@@ -52,6 +58,9 @@ public class Transition extends SymmetricComponent {
 		this.type = Shape.CONICAL;
 		this.shapeParameter = 0;
 		this.clipped = true;
+
+		super.displayOrder_side = 2;		// Order for displaying the component in the 2D side view
+		super.displayOrder_back = 2;		// Order for displaying the component in the 2D back view
 	}
 
 	////////  Length  ////////
@@ -85,7 +94,21 @@ public class Transition extends SymmetricComponent {
 		return foreRadius;
 	}
 
+	/**
+	 * Return the fore radius that was manually entered, so not the value that the component received from automatic
+	 * fore radius.
+	 */
+	public double getForeRadiusNoAutomatic() {
+		return foreRadius;
+	}
+
 	public void setForeRadius(double radius) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof Transition) {
+				((Transition) listener).setForeRadius(radius);
+			}
+		}
+
 		if ((this.foreRadius == radius) && (autoForeRadius == false))
 			return;
 
@@ -105,6 +128,12 @@ public class Transition extends SymmetricComponent {
 	}
 
 	public void setForeRadiusAutomatic(boolean auto) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof Transition) {
+				((Transition) listener).setForeRadiusAutomatic(auto);
+			}
+		}
+
 		if (autoForeRadius == auto)
 			return;
 
@@ -133,9 +162,21 @@ public class Transition extends SymmetricComponent {
 		return aftRadius;
 	}
 
-
+	/**
+	 * Return the aft radius that was manually entered, so not the value that the component received from automatic
+	 * zft radius.
+	 */
+	public double getAftRadiusNoAutomatic() {
+		return aftRadius;
+	}
 
 	public void setAftRadius(double radius) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof Transition) {
+				((Transition) listener).setAftRadius(radius);
+			}
+		}
+
 		if ((this.aftRadius == radius) && (autoAftRadius2 == false))
 			return;
 
@@ -155,6 +196,12 @@ public class Transition extends SymmetricComponent {
 	}
 
 	public void setAftRadiusAutomatic(boolean auto) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof Transition) {
+				((Transition) listener).setAftRadiusAutomatic(auto);
+			}
+		}
+
 		if (autoAftRadius2 == auto)
 			return;
 
@@ -183,7 +230,15 @@ public class Transition extends SymmetricComponent {
 		return getForeRadius();
 	}
 
+	@Override
+	public boolean usesPreviousCompAutomatic() {
+		return isForeRadiusAutomatic();
+	}
 
+	@Override
+	public boolean usesNextCompAutomatic() {
+		return isAftRadiusAutomatic();
+	}
 
 
 	////////  Type & shape  /////////
@@ -193,6 +248,12 @@ public class Transition extends SymmetricComponent {
 	}
 
 	public void setType(Shape type) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof Transition) {
+				((Transition) listener).setType(type);
+			}
+		}
+
 		if (type == null) {
 			throw new IllegalArgumentException("setType called with null argument");
 		}
@@ -209,6 +270,12 @@ public class Transition extends SymmetricComponent {
 	}
 
 	public void setShapeParameter(double n) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof Transition) {
+				((Transition) listener).setShapeParameter(n);
+			}
+		}
+
 		if (shapeParameter == n)
 			return;
 		this.shapeParameter = MathUtil.clamp(n, type.minParameter(), type.maxParameter());
@@ -222,6 +289,12 @@ public class Transition extends SymmetricComponent {
 	}
 
 	public void setClipped(boolean c) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof Transition) {
+				((Transition) listener).setClipped(c);
+			}
+		}
+
 		if (clipped == c)
 			return;
 		clipped = c;
@@ -248,6 +321,12 @@ public class Transition extends SymmetricComponent {
 	}
 
 	public void setForeShoulderRadius(double foreShoulderRadius) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof Transition) {
+				((Transition) listener).setForeShoulderRadius(foreShoulderRadius);
+			}
+		}
+
 		if (MathUtil.equals(this.foreShoulderRadius, foreShoulderRadius))
 			return;
 		this.foreShoulderRadius = foreShoulderRadius;
@@ -260,6 +339,12 @@ public class Transition extends SymmetricComponent {
 	}
 
 	public void setForeShoulderThickness(double foreShoulderThickness) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof Transition) {
+				((Transition) listener).setForeShoulderThickness(foreShoulderThickness);
+			}
+		}
+
 		if (MathUtil.equals(this.foreShoulderThickness, foreShoulderThickness))
 			return;
 		this.foreShoulderThickness = foreShoulderThickness;
@@ -271,6 +356,12 @@ public class Transition extends SymmetricComponent {
 	}
 
 	public void setForeShoulderLength(double foreShoulderLength) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof Transition) {
+				((Transition) listener).setForeShoulderLength(foreShoulderLength);
+			}
+		}
+
 		if (MathUtil.equals(this.foreShoulderLength, foreShoulderLength))
 			return;
 		this.foreShoulderLength = foreShoulderLength;
@@ -282,6 +373,12 @@ public class Transition extends SymmetricComponent {
 	}
 
 	public void setForeShoulderCapped(boolean capped) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof Transition) {
+				((Transition) listener).setForeShoulderCapped(capped);
+			}
+		}
+
 		if (this.foreShoulderCapped == capped)
 			return;
 		this.foreShoulderCapped = capped;
@@ -296,6 +393,12 @@ public class Transition extends SymmetricComponent {
 	}
 
 	public void setAftShoulderRadius(double aftShoulderRadius) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof Transition) {
+				((Transition) listener).setAftShoulderRadius(aftShoulderRadius);
+			}
+		}
+
 		if (MathUtil.equals(this.aftShoulderRadius, aftShoulderRadius))
 			return;
 		this.aftShoulderRadius = aftShoulderRadius;
@@ -308,6 +411,12 @@ public class Transition extends SymmetricComponent {
 	}
 
 	public void setAftShoulderThickness(double aftShoulderThickness) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof Transition) {
+				((Transition) listener).setAftShoulderThickness(aftShoulderThickness);
+			}
+		}
+
 		if (MathUtil.equals(this.aftShoulderThickness, aftShoulderThickness))
 			return;
 		this.aftShoulderThickness = aftShoulderThickness;
@@ -319,6 +428,12 @@ public class Transition extends SymmetricComponent {
 	}
 
 	public void setAftShoulderLength(double aftShoulderLength) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof Transition) {
+				((Transition) listener).setAftShoulderLength(aftShoulderLength);
+			}
+		}
+
 		if (MathUtil.equals(this.aftShoulderLength, aftShoulderLength))
 			return;
 		this.aftShoulderLength = aftShoulderLength;
@@ -330,6 +445,12 @@ public class Transition extends SymmetricComponent {
 	}
 
 	public void setAftShoulderCapped(boolean capped) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof Transition) {
+				((Transition) listener).setAftShoulderCapped(capped);
+			}
+		}
+
 		if (this.aftShoulderCapped == capped)
 			return;
 		this.aftShoulderCapped = capped;
@@ -596,6 +717,11 @@ public class Transition extends SymmetricComponent {
 
 		fireComponentChangeEvent(ComponentChangeEvent.BOTH_CHANGE);
 
+	}
+
+	@Override
+	public InsideColorComponentHandler getInsideColorComponentHandler() {
+		return this.insideColorComponentHandler;
 	}
 
 	/**
@@ -937,5 +1063,6 @@ public class Transition extends SymmetricComponent {
             return null;
         }
 	}
+
 
 }

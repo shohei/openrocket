@@ -1,6 +1,8 @@
 package net.sf.openrocket.gui.dialogs.optimization;
 
 import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.Toolkit;
 import java.awt.Window;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -48,8 +50,6 @@ import javax.swing.table.TableColumnModel;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.TreePath;
 
-import net.sf.openrocket.optimization.rocketoptimization.modifiers.GenericComponentModifier;
-import net.sf.openrocket.rocketcomponent.FinSet;
 import net.sf.openrocket.rocketcomponent.FlightConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -73,6 +73,7 @@ import net.sf.openrocket.gui.scalefigure.RocketFigure;
 import net.sf.openrocket.gui.scalefigure.ScaleScrollPane;
 import net.sf.openrocket.gui.util.FileHelper;
 import net.sf.openrocket.gui.util.GUIUtil;
+import net.sf.openrocket.gui.widgets.SelectColorToggleButton;
 import net.sf.openrocket.gui.util.SwingPreferences;
 import net.sf.openrocket.l10n.Translator;
 import net.sf.openrocket.logging.Markers;
@@ -88,7 +89,6 @@ import net.sf.openrocket.optimization.rocketoptimization.goals.MaximizationGoal;
 import net.sf.openrocket.optimization.rocketoptimization.goals.MinimizationGoal;
 import net.sf.openrocket.optimization.rocketoptimization.goals.ValueSeekGoal;
 import net.sf.openrocket.optimization.services.OptimizationServiceHelper;
-import net.sf.openrocket.rocketcomponent.FlightConfigurationId;
 import net.sf.openrocket.rocketcomponent.Rocket;
 import net.sf.openrocket.rocketcomponent.RocketComponent;
 import net.sf.openrocket.startup.Application;
@@ -100,6 +100,7 @@ import net.sf.openrocket.util.BugException;
 import net.sf.openrocket.util.Chars;
 import net.sf.openrocket.util.Named;
 import net.sf.openrocket.util.TextUtil;
+import net.sf.openrocket.gui.widgets.SelectColorButton;
 
 /**
  * General rocket optimization dialog. 
@@ -191,12 +192,13 @@ public class GeneralOptimizationDialog extends JDialog {
 	 * @param document  the document
 	 * @param parent    the parent window
 	 */
-	public GeneralOptimizationDialog(OpenRocketDocument document, Window parent) {
+	public GeneralOptimizationDialog(OpenRocketDocument document, Window parent) throws InterruptedException {
 		super(parent, trans.get("title"));
 		
 		this.baseDocument = document;
 		this.documentCopy = document.copy();
-		
+
+		checkExistingSimulations();
 		loadOptimizationParameters();
 		loadSimulationModifiers();
 		
@@ -205,7 +207,7 @@ public class GeneralOptimizationDialog extends JDialog {
 		JScrollPane scroll;
 		String tip;
 		
-		JPanel panel = new JPanel(new MigLayout("fill"));
+		JPanel panel = new JPanel(new MigLayout("fill, w 1200"));
 		
 		ChangeListener clearHistoryChangeListener = e -> clearHistory();
 		ActionListener clearHistoryActionListener = e -> clearHistory();
@@ -251,15 +253,15 @@ public class GeneralOptimizationDialog extends JDialog {
 		label = new StyledLabel(trans.get("lbl.paramsToOptimize"), Style.BOLD);
 		disableComponents.add(label);
 		panel.add(label, "split 3, flowy");
-		panel.add(scroll, "wmin 300lp, height 200lp, grow");
+		panel.add(scroll, "wmin 300lp, height 150lp, grow");
 		selectedModifierDescription = new DescriptionArea(2, -3);
 		disableComponents.add(selectedModifierDescription);
-		panel.add(selectedModifierDescription, "growx");
+		panel.add(selectedModifierDescription, "hmin 20lp, growx");
 		
 		// // Add/remove buttons
 		sub = new JPanel(new MigLayout("fill"));
 		
-		addButton = new JButton(Chars.LEFT_ARROW + " " + trans.get("btn.add") + "   ");
+		addButton = new SelectColorButton(Chars.LEFT_ARROW + " " + trans.get("btn.add") + "   ");
 		addButton.setToolTipText(trans.get("btn.add.ttip"));
 		addButton.addActionListener(e -> {
 			SimulationModifier mod = getSelectedAvailableModifier();
@@ -276,7 +278,7 @@ public class GeneralOptimizationDialog extends JDialog {
 		disableComponents.add(addButton);
 		sub.add(addButton, "wrap para, sg button");
 		
-		removeButton = new JButton("   " + trans.get("btn.remove") + " " + Chars.RIGHT_ARROW);
+		removeButton = new SelectColorButton("   " + trans.get("btn.remove") + " " + Chars.RIGHT_ARROW);
 		removeButton.setToolTipText(trans.get("btn.remove.ttip"));
 		removeButton.addActionListener(e -> {
 			SimulationModifier mod = getSelectedModifier();
@@ -295,7 +297,7 @@ public class GeneralOptimizationDialog extends JDialog {
 		disableComponents.add(removeButton);
 		sub.add(removeButton, "wrap para*2, sg button");
 		
-		removeAllButton = new JButton(trans.get("btn.removeAll"));
+		removeAllButton = new SelectColorButton(trans.get("btn.removeAll"));
 		removeAllButton.setToolTipText(trans.get("btn.removeAll.ttip"));
 		removeAllButton.addActionListener(new ActionListener() {
 			@Override
@@ -527,7 +529,7 @@ public class GeneralOptimizationDialog extends JDialog {
 		
 		// // Start/Stop button
 		
-		startButton = new JToggleButton(START_TEXT);
+		startButton = new SelectColorToggleButton(START_TEXT);
 		startButton.addActionListener(e -> {
 			if (updating) {
 				log.debug("Updating, ignoring event");
@@ -543,7 +545,7 @@ public class GeneralOptimizationDialog extends JDialog {
 		});
 		sub.add(startButton, "span, growx, wrap para*2");
 		
-		plotButton = new JButton(trans.get("btn.plotPath"));
+		plotButton = new SelectColorButton(trans.get("btn.plotPath"));
 		plotButton.setToolTipText(trans.get("btn.plotPath.ttip"));
 		plotButton.addActionListener(e -> {
 			log.info(Markers.USER_MARKER, "Plotting optimization path, dimensionality=" + selectedModifiers.size());
@@ -559,7 +561,7 @@ public class GeneralOptimizationDialog extends JDialog {
 		disableComponents.add(plotButton);
 		sub.add(plotButton, "span, growx, wrap");
 		
-		saveButton = new JButton(trans.get("btn.save"));
+		saveButton = new SelectColorButton(trans.get("btn.save"));
 		saveButton.setToolTipText(trans.get("btn.save.ttip"));
 		saveButton.addActionListener(e -> {
 			log.info(Markers.USER_MARKER, "User selected save path");
@@ -571,7 +573,7 @@ public class GeneralOptimizationDialog extends JDialog {
 		panel.add(sub, "wrap para*2");
 		
 		// // Bottom buttons
-		final JButton applyButton = new JButton(trans.get("btn.apply"));
+		final JButton applyButton = new SelectColorButton(trans.get("btn.apply"));
 		applyButton.setToolTipText(trans.get("btn.apply.ttip"));
 		applyButton.addActionListener(e -> {
 			log.info(Markers.USER_MARKER, "Applying optimization changes");
@@ -580,7 +582,7 @@ public class GeneralOptimizationDialog extends JDialog {
 		disableComponents.add(applyButton);
 		panel.add(applyButton, "span, split, gapright para, right");
 
-		final JButton resetButton = new JButton(trans.get("btn.reset"));
+		final JButton resetButton = new SelectColorButton(trans.get("btn.reset"));
 		resetButton.setToolTipText(trans.get("btn.reset.ttip"));
 		resetButton.addActionListener(e -> {
 			log.info(Markers.USER_MARKER, "Resetting optimization design");
@@ -589,7 +591,7 @@ public class GeneralOptimizationDialog extends JDialog {
 		disableComponents.add(resetButton);
 		panel.add(resetButton, "gapright para, right");
 
-		final JButton closeButton = new JButton(trans.get("btn.close"));
+		final JButton closeButton = new SelectColorButton(trans.get("btn.close"));
 		closeButton.setToolTipText(trans.get("btn.close.ttip"));
 		closeButton.addActionListener(new ActionListener() {
 			@Override
@@ -601,16 +603,16 @@ public class GeneralOptimizationDialog extends JDialog {
 		});
 		panel.add(closeButton, "right");
 		
-		this.add(panel);
+		this.add(new JScrollPane(panel));
 		clearHistory();
 		updateComponents();
 		GUIUtil.setDisposableDialogOptions(this, null);
 
-		// seem like a reasonable defaults
-		this.setSize(1200, 600);
-		// System.err.println("OptimizationDialog.size:     " + this.getSize());
-		this.setLocation(100, 100);
-		// System.err.println("OptimizationDialog.location: " + this.getLocation());
+		int screenHeight = Toolkit.getDefaultToolkit().getScreenSize().height;
+		this.setSize(new Dimension(this.getWidth(), Math.min(this.getHeight(), screenHeight - 150)));
+		this.pack();
+
+		this.setLocation((parent.getWidth() - 1200)/2, 100);
 	}
 	
 	private void startOptimization() {
@@ -905,6 +907,19 @@ public class GeneralOptimizationDialog extends JDialog {
 		populateParameters();
 		
 	}
+
+	/**
+	 * Checks whether there are simulations present in the document. If not, a pop-up information
+	 * dialog launches stating that the optimizer cannot be launched.
+	 * @throws InterruptedException when no simulations present
+	 */
+	private void checkExistingSimulations() throws InterruptedException {
+		if (documentCopy.getSimulations().size() == 0) {
+			JOptionPane.showMessageDialog(null, trans.get("GeneralOptimizationDialog.info.noSims.message"),
+					trans.get("GeneralOptimizationDialog.info.noSims.title"), JOptionPane.INFORMATION_MESSAGE);
+			throw new InterruptedException("No simulations to optimize");
+		}
+	}
 	
 	private void populateSimulations() {
 		String current = null;
@@ -1111,7 +1126,7 @@ public class GeneralOptimizationDialog extends JDialog {
 		
 		
 		JFileChooser chooser = new JFileChooser();
-		chooser.setFileFilter(FileHelper.CSV_FILE_FILTER);
+		chooser.setFileFilter(FileHelper.CSV_FILTER);
 		chooser.setCurrentDirectory(((SwingPreferences) Application.getPreferences()).getDefaultDirectory());
 		chooser.setAccessory(csvOptions);
 		
@@ -1122,7 +1137,7 @@ public class GeneralOptimizationDialog extends JDialog {
 		if (file == null)
 			return;
 		
-		file = FileHelper.ensureExtension(file, "csv");
+		file = FileHelper.forceExtension(file, "csv");
 		if (!FileHelper.confirmWrite(file, this)) {
 			return;
 		}

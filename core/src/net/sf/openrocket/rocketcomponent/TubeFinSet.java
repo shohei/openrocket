@@ -2,8 +2,11 @@ package net.sf.openrocket.rocketcomponent;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.EventObject;
 import java.util.List;
 
+import net.sf.openrocket.appearance.Appearance;
+import net.sf.openrocket.appearance.Decal;
 import net.sf.openrocket.l10n.Translator;
 import net.sf.openrocket.preset.ComponentPreset;
 import net.sf.openrocket.preset.ComponentPreset.Type;
@@ -12,12 +15,9 @@ import net.sf.openrocket.rocketcomponent.position.AxialMethod;
 import net.sf.openrocket.rocketcomponent.position.AxialPositionable;
 import net.sf.openrocket.rocketcomponent.position.RadiusMethod;
 import net.sf.openrocket.startup.Application;
-import net.sf.openrocket.util.BoundingBox;
-import net.sf.openrocket.util.Coordinate;
-import net.sf.openrocket.util.MathUtil;
-import net.sf.openrocket.util.Transformation;
+import net.sf.openrocket.util.*;
 
-public class TubeFinSet extends ExternalComponent implements AxialPositionable, BoxBounded, RingInstanceable {
+public class TubeFinSet extends ExternalComponent implements AxialPositionable, BoxBounded, RingInstanceable, InsideColorComponent {
 	private static final Translator trans = Application.getTranslator();
 	
 	private final static double DEFAULT_RADIUS = 0.025;
@@ -27,6 +27,8 @@ public class TubeFinSet extends ExternalComponent implements AxialPositionable, 
 	protected double thickness = 0.002;
 	private AngleMethod angleMethod = AngleMethod.FIXED;
 	protected RadiusMethod radiusMethod = RadiusMethod.RELATIVE;
+
+	private final InsideColorComponentHandler insideColorComponentHandler = new InsideColorComponentHandler(this);
 	
 	/**
 	 * Rotation angle of the first fin.  Zero corresponds to the positive y-axis.
@@ -54,9 +56,17 @@ public class TubeFinSet extends ExternalComponent implements AxialPositionable, 
 	public TubeFinSet() {
 		super(AxialMethod.BOTTOM);
 		length = 0.10;
+		super.displayOrder_side = 3;		// Order for displaying the component in the 2D side view
+		super.displayOrder_back = 3;		// Order for displaying the component in the 2D back view
 	}
 	
 	public void setLength(double length) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof TubeFinSet) {
+				((TubeFinSet) listener).setLength(length);
+			}
+		}
+
 		if (MathUtil.equals(this.length, length))
 			return;
 		this.length = length;
@@ -112,6 +122,12 @@ public class TubeFinSet extends ExternalComponent implements AxialPositionable, 
 	 * @param radius  the outside radius in standard units
 	 */
 	public void setOuterRadius(double radius) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof TubeFinSet) {
+				((TubeFinSet) listener).setOuterRadius(radius);
+			}
+		}
+
 		if ((this.outerRadius == radius) && (autoRadius == false))
 			return;
 		
@@ -128,6 +144,12 @@ public class TubeFinSet extends ExternalComponent implements AxialPositionable, 
 	 * Sets whether the radius is selected automatically or not.
 	 */
 	public void setOuterRadiusAutomatic(boolean auto) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof TubeFinSet) {
+				((TubeFinSet) listener).setOuterRadiusAutomatic(auto);
+			}
+		}
+
 		if (autoRadius == auto)
 			return;
 		
@@ -141,6 +163,12 @@ public class TubeFinSet extends ExternalComponent implements AxialPositionable, 
 	}
 	
 	public void setInnerRadius(double r) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof TubeFinSet) {
+				((TubeFinSet) listener).setInnerRadius(r);
+			}
+		}
+
 		setThickness(getOuterRadius() - r);
 	}
 	
@@ -157,6 +185,12 @@ public class TubeFinSet extends ExternalComponent implements AxialPositionable, 
 	 * allowed, and will result in setting the thickness to the maximum radius.
 	 */
 	public void setThickness(double thickness) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof TubeFinSet) {
+				((TubeFinSet) listener).setThickness(thickness);
+			}
+		}
+
 		if ((this.thickness == thickness))
 			return;
 		this.thickness = MathUtil.clamp(thickness, 0, getOuterRadius());
@@ -183,6 +217,12 @@ public class TubeFinSet extends ExternalComponent implements AxialPositionable, 
 	 * @param n The number of fins, greater of equal to one.
 	 */
 	public void setFinCount(int n) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof TubeFinSet) {
+				((TubeFinSet) listener).setFinCount(n);
+			}
+		}
+
 		if (fins == n)
 			return;
 		if (n < 1)
@@ -211,6 +251,12 @@ public class TubeFinSet extends ExternalComponent implements AxialPositionable, 
 	 * @param r The base rotation amount.
 	 */
 	public void setBaseRotation(double r) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof TubeFinSet) {
+				((TubeFinSet) listener).setBaseRotation(r);
+			}
+		}
+
 		setAngleOffset(r);
 	}
 	
@@ -225,7 +271,7 @@ public class TubeFinSet extends ExternalComponent implements AxialPositionable, 
 	@Override
 	public void setAxialMethod(AxialMethod position) {
 		super.setAxialMethod(position);
-		fireComponentChangeEvent(ComponentChangeEvent.BOTH_CHANGE);
+		fireComponentChangeEvent(ComponentChangeEvent.NONFUNCTIONAL_CHANGE);
 	}
 	
 	@Override
@@ -260,7 +306,7 @@ public class TubeFinSet extends ExternalComponent implements AxialPositionable, 
 	
 	@Override
 	public double getLongitudinalUnitInertia() {
-		// Logitudinal Unit Inertia for a single tube fin.
+		// Longitudinal Unit Inertia for a single tube fin.
 		// 1/12 * (3 * (r1^2 + r2^2) + h^2)
 		final double inertia = (3 * (MathUtil.pow2(getOuterRadius()) + MathUtil.pow2(getInnerRadius())) + MathUtil.pow2(getLength())) / 12;
 		if (fins == 1) {
@@ -351,6 +397,12 @@ public class TubeFinSet extends ExternalComponent implements AxialPositionable, 
 
 	@Override
 	public void setInstanceCount(int newCount) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof TubeFinSet) {
+				((TubeFinSet) listener).setInstanceCount(newCount);
+			}
+		}
+
 		setFinCount(newCount);
 	}
 
@@ -373,6 +425,12 @@ public class TubeFinSet extends ExternalComponent implements AxialPositionable, 
 
 	@Override
 	public void setAngleOffset(double angleRadians) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof TubeFinSet) {
+				((TubeFinSet) listener).setAngleOffset(angleRadians);
+			}
+		}
+
 		final double reducedAngle = MathUtil.reducePi(angleRadians);
 		if (MathUtil.equals(reducedAngle, firstFinOffsetRadians))
 			return;
@@ -399,6 +457,12 @@ public class TubeFinSet extends ExternalComponent implements AxialPositionable, 
 
 	@Override
 	public void setAngleMethod(AngleMethod newAngleMethod) {
+		for (RocketComponent listener : configListeners) {
+			if (listener instanceof TubeFinSet) {
+				((TubeFinSet) listener).setAngleMethod(newAngleMethod);
+			}
+		}
+
 		mutex.verify();
 		this.angleMethod = newAngleMethod;
 		fireComponentChangeEvent(ComponentChangeEvent.BOTH_CHANGE);
@@ -452,5 +516,10 @@ public class TubeFinSet extends ExternalComponent implements AxialPositionable, 
 		// TODO Auto-generated method stub
 		
 	}
-	
+
+
+	@Override
+	public InsideColorComponentHandler getInsideColorComponentHandler() {
+		return this.insideColorComponentHandler;
+	}
 }

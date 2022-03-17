@@ -1,18 +1,12 @@
 package net.sf.openrocket.gui.dialogs;
 
-import java.awt.Desktop;
 import java.awt.Dialog;
 import java.awt.Dimension;
 import java.awt.Window;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.io.UnsupportedEncodingException;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URLEncoder;
 import java.util.List;
 import java.util.Locale;
 import java.util.SortedSet;
@@ -20,32 +14,35 @@ import java.util.TreeSet;
 
 import javax.swing.JButton;
 import javax.swing.JDialog;
+import javax.swing.JEditorPane;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
-import javax.swing.JTextArea;
+import javax.swing.JTextPane;
+import javax.swing.UIManager;
+
+import com.jogamp.opengl.JoglVersion;
 
 import net.miginfocom.swing.MigLayout;
-import net.sf.openrocket.communication.BugReporter;
-import net.sf.openrocket.gui.components.SelectableLabel;
 import net.sf.openrocket.gui.components.StyledLabel;
+import net.sf.openrocket.gui.components.URLLabel;
 import net.sf.openrocket.gui.util.GUIUtil;
 import net.sf.openrocket.l10n.Translator;
 import net.sf.openrocket.logging.LogLevelBufferLogger;
 import net.sf.openrocket.logging.LogLine;
 import net.sf.openrocket.logging.LoggingSystemSetup;
 import net.sf.openrocket.startup.Application;
-import net.sf.openrocket.util.BugException;
 import net.sf.openrocket.util.BuildProperties;
 import net.sf.openrocket.util.JarUtil;
-
-import com.jogamp.opengl.JoglVersion;
+import net.sf.openrocket.gui.widgets.SelectColorButton;
 
 @SuppressWarnings("serial")
 public class BugReportDialog extends JDialog {
 	
+	private static final String NEW_ISSUES_URL = "https://github.com/openrocket/openrocket/issues/new";
 	private static final String REPORT_EMAIL = "openrocket-bugs@lists.sourceforge.net";
+	private static final String REPORT_EMAIL_URL = "mailto:" + REPORT_EMAIL;
+	
 	private static final Translator trans = Application.getTranslator();
 	
 	
@@ -65,28 +62,27 @@ public class BugReportDialog extends JDialog {
 		//// <html>If connected to the Internet, you can simply click 
 		//// <em>Send bug report</em>.
 		label = new JLabel(trans.get("bugreport.dlg.connectedInternet"));
-		d = label.getPreferredSize();
-		d.width = 100000;
-		label.setMaximumSize(d);
-		panel.add(label, "gapleft para, wrap");
+		panel.add(label, "gapleft para, split 2, gapright rel");
+		
+		panel.add(new URLLabel(NEW_ISSUES_URL), "growx, wrap para");
 		
 		//// Otherwise, send the text below to the address:
 		panel.add(new JLabel(trans.get("bugreport.dlg.otherwise") + " "),
-				"gapleft para, split 2, gapright rel");
-		panel.add(new SelectableLabel(REPORT_EMAIL), "growx, wrap para");
-		
-		
-		final JTextArea textArea = new JTextArea(message, 20, 70);
-		textArea.setEditable(true);
-		panel.add(new JScrollPane(textArea), "grow, wrap");
-		
+				  "gapleft para, split 2, gapright rel");
+		panel.add(new URLLabel(REPORT_EMAIL_URL, REPORT_EMAIL), "growx, wrap para");
+
+		final JEditorPane editorPane = new JEditorPane("text/html", formatNewlineHTML(message));
+		editorPane.putClientProperty(JTextPane.HONOR_DISPLAY_PROPERTIES, true);
+		editorPane.setFont(UIManager.getFont("Label.font"));
+		editorPane.setPreferredSize(new Dimension(600, 400));
+		editorPane.setEditable(true);
+		editorPane.setCaretPosition(0);		// Scroll to the top by default
+		panel.add(new JScrollPane(editorPane), "grow, wrap");
 		
 		panel.add(new StyledLabel(trans.get("bugreport.lbl.Theinformation"), -1), "wrap para");
 		
-		
-		
 		////Close button
-		JButton close = new JButton(trans.get("dlg.but.close"));
+		JButton close = new SelectColorButton(trans.get("dlg.but.close"));
 		close.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
@@ -95,67 +91,6 @@ public class BugReportDialog extends JDialog {
 		});
 		panel.add(close, "right, sizegroup buttons, split");
 		
-		
-		////  Mail button
-		//		if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Action.MAIL)) {
-		//			JButton mail = new JButton("Open email");
-		//			mail.setToolTipText("Open email client with the suitable email ready.");
-		//			mail.addActionListener(new ActionListener() {
-		//				@Override
-		//				public void actionPerformed(ActionEvent e) {
-		//					String text = textArea.getText();
-		//					openEmail(text);
-		//				}
-		//			});
-		//			panel.add(mail, "right, sizegroup buttons");
-		//		}
-		
-		
-		////  Send bug report button
-		JButton send = new JButton(trans.get("bugreport.dlg.but.Sendbugreport"));
-		////  Automatically send the bug report to the OpenRocket developers.
-		send.setToolTipText(trans.get("bugreport.dlg.but.Sendbugreport.Ttip"));
-		send.addActionListener(new ActionListener() {
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				String text = textArea.getText();
-				if (text.equals(message) && !sendIfUnchanged) {
-					JOptionPane.showMessageDialog(BugReportDialog.this,
-							trans.get("bugreport.dlg.provideDescription"),
-							trans.get("bugreport.dlg.provideDescription.title"), JOptionPane.ERROR_MESSAGE);
-					return;
-				}
-				
-				try {
-					
-					BugReporter.sendBugReport(text);
-					
-					// Success if we came here
-					//bugreport.dlg.successmsg
-					/*JOptionPane.showMessageDialog(BugReportDialog.this,
-							new Object[] { "Bug report successfully sent.",
-									"Thank you for helping make OpenRocket better!" },
-							"Bug report sent", JOptionPane.INFORMATION_MESSAGE);*/
-					JOptionPane.showMessageDialog(BugReportDialog.this,
-							new Object[] { trans.get("bugreport.dlg.successmsg1"),
-									trans.get("bugreport.dlg.successmsg2") },
-							trans.get("bugreport.dlg.successmsg3"), JOptionPane.INFORMATION_MESSAGE);
-					
-				} catch (Exception ex) {
-					// Sending the message failed.
-					JOptionPane.showMessageDialog(BugReportDialog.this,
-							//// OpenRocket was unable to send the bug report:
-							new Object[] { trans.get("bugreport.dlg.failedmsg1"),
-									ex.getClass().getSimpleName() + ": " + ex.getMessage(), " ",
-									//// Please send the report manually to 
-									trans.get("bugreport.dlg.failedmsg2") + " " + REPORT_EMAIL },
-							//// Error sending report
-							trans.get("bugreport.dlg.failedmsg3"), JOptionPane.ERROR_MESSAGE);
-				}
-			}
-		});
-		panel.add(send, "right, sizegroup buttons");
-		
 		this.add(panel);
 		
 		this.validate();
@@ -163,10 +98,8 @@ public class BugReportDialog extends JDialog {
 		this.pack();
 		this.setLocationRelativeTo(parent);
 		
-		GUIUtil.setDisposableDialogOptions(this, send);
+		GUIUtil.setDisposableDialogOptions(this, close);
 	}
-	
-	
 	
 	/**
 	 * Show a general bug report dialog allowing the user to input information about
@@ -178,17 +111,18 @@ public class BugReportDialog extends JDialog {
 		
 		StringBuilder sb = new StringBuilder();
 		
-		sb.append("---------- Bug report ----------\n");
+		sb.append("<html>---------- Bug report ----------\n");
 		sb.append('\n');
-		sb.append("Include detailed steps on how to trigger the bug:\n");
+		sb.append("<b>Include detailed steps on how to trigger the bug:</b>\n");
+		sb.append("<i>(You can edit text directly in this window)</i>\n");
 		sb.append('\n');
 		sb.append("1. \n");
 		sb.append("2. \n");
 		sb.append("3. \n");
 		sb.append('\n');
 		
-		sb.append("What does the software do and what in your opinion should it do in the " +
-				"case described above:\n");
+		sb.append("<b>What does the software do and what in your opinion should it do in the " +
+				"case described above:</b>\n");
 		sb.append('\n');
 		sb.append('\n');
 		sb.append('\n');
@@ -205,7 +139,7 @@ public class BugReportDialog extends JDialog {
 		addSystemInformation(sb);
 		sb.append("---------- Error log ----------\n");
 		addErrorLog(sb);
-		sb.append("---------- End of bug report ----------\n");
+		sb.append("---------- End of bug report ----------</html>\n");
 		sb.append('\n');
 		
 		BugReportDialog reportDialog = new BugReportDialog(parent,
@@ -224,14 +158,15 @@ public class BugReportDialog extends JDialog {
 	public static void showExceptionDialog(Window parent, Thread t, Throwable e) {
 		StringBuilder sb = new StringBuilder();
 		
-		sb.append("---------- Bug report ----------\n");
+		sb.append("<html>---------- Bug report ----------\n");
 		sb.append('\n');
-		sb.append("Please include a description about what actions you were " +
-				"performing when the exception occurred:\n");
+		sb.append("<b>Please include a description about what actions you were " +
+				"performing when the exception occurred:</b>\n");
+		sb.append("<i>(You can edit text directly in this window)</i>\n");
 		sb.append('\n');
-		sb.append('\n');
-		sb.append('\n');
-		sb.append('\n');
+		sb.append("1. \n");
+		sb.append("2. \n");
+		sb.append("3. \n");
 		
 		
 		sb.append("Include your email address (optional; it helps if we can " +
@@ -246,7 +181,8 @@ public class BugReportDialog extends JDialog {
 		StringWriter sw = new StringWriter();
 		PrintWriter pw = new PrintWriter(sw);
 		e.printStackTrace(pw);
-		sb.append(sw.getBuffer());
+		String stackTrace = unformatHTML(String.valueOf(sw.getBuffer()));
+		sb.append(stackTrace);
 		sb.append('\n');
 		
 		
@@ -263,7 +199,7 @@ public class BugReportDialog extends JDialog {
 		addSystemInformation(sb);
 		sb.append("---------- Error log ----------\n");
 		addErrorLog(sb);
-		sb.append("---------- End of bug report ----------\n");
+		sb.append("---------- End of bug report ----------</html>\n");
 		sb.append('\n');
 		
 		BugReportDialog reportDialog =
@@ -272,87 +208,68 @@ public class BugReportDialog extends JDialog {
 		reportDialog.setVisible(true);
 	}
 	
-	
 	private static void addSystemInformation(StringBuilder sb) {
-		sb.append("OpenRocket version: " + BuildProperties.getVersion() + "\n");
-		sb.append("OpenRocket source: " + BuildProperties.getBuildSource() + "\n");
-		sb.append("OpenRocket location: " + JarUtil.getCurrentJarFile() + "\n");
-		sb.append("JOGL version: " + JoglVersion.getInstance().getImplementationVersion() + "\n");
-		sb.append("Current default locale: " + Locale.getDefault() + "\n");
-		sb.append("System properties:\n");
-		
+		StringBuilder sbTemp = new StringBuilder();
+		sbTemp.append("OpenRocket version: " + BuildProperties.getVersion() + "\n");
+		sbTemp.append("OpenRocket source: " + BuildProperties.getBuildSource() + "\n");
+		sbTemp.append("OpenRocket location: " + JarUtil.getCurrentJarFile() + "\n");
+		sbTemp.append("JOGL version: " + JoglVersion.getInstance().getImplementationVersion() + "\n");
+		sbTemp.append("Current default locale: " + Locale.getDefault() + "\n");
+		sbTemp.append("System properties:\n");
+
 		// Sort the keys
 		SortedSet<String> keys = new TreeSet<String>();
 		for (Object key : System.getProperties().keySet()) {
 			keys.add((String) key);
 		}
-		
+
 		for (String key : keys) {
 			String value = System.getProperty(key);
-			sb.append("  " + key + "=");
+			sbTemp.append("  " + key + "=");
 			if (key.equals("line.separator")) {
 				for (char c : value.toCharArray()) {
-					sb.append(String.format("\\u%04x", (int) c));
+					sbTemp.append(String.format("\\u%04x", (int) c));
 				}
 			} else {
-				sb.append(value);
+				sbTemp.append(value);
 			}
-			sb.append('\n');
+			sbTemp.append('\n');
 		}
+
+		String message = unformatHTML(sbTemp.toString());
+		sb.append(message);
 	}
-	
-	
+
 	private static void addErrorLog(StringBuilder sb) {
+		StringBuilder sbTemp = new StringBuilder();
 		LogLevelBufferLogger buffer = LoggingSystemSetup.getBufferLogger();
 		List<LogLine> logs = buffer.getLogs();
 		for (LogLine l : logs) {
-			sb.append(l.toString()).append('\n');
+			sbTemp.append(l.toString()).append('\n');
 		}
+
+		String message = unformatHTML(sbTemp.toString());
+		sb.append(message);
 	}
-	
-	
-	
+
 	/**
-	 * Open the default email client with the suitable bug report.
-	 * Note that this does not work on some systems even if Desktop.isSupported()
-	 * claims so.
-	 * 
-	 * @param text	the bug report text.
-	 * @return		whether opening the client succeeded.
+	 * Replace newline character \n to an HTML newline. Instead of just using a <br> tag, we replace newlines with a
+	 * paragraph tag with zero margin. This is so that when you copy the HTML text and paste it somewhere, that the
+	 * HTML newlines are also interpreted as newlines in the new text. A <br> tag would just be replaced by a space.
+	 * @param text text to be formatted
+	 * @return text with HTML newlines
 	 */
-	@SuppressWarnings("unused")
-	private boolean openEmail(String text) {
-		String version;
-		
-		try {
-			text = URLEncoder.encode(text, "UTF-8");
-			version = URLEncoder.encode(BuildProperties.getVersion(), "UTF-8");
-		} catch (UnsupportedEncodingException e) {
-			throw new BugException(e);
-		}
-		
-		
-		
-		String mailto = "mailto:" + REPORT_EMAIL
-				+ "?subject=Bug%20report%20for%20OpenRocket%20" + version
-				+ "?body=" + text;
-		URI uri;
-		try {
-			uri = new URI(mailto);
-		} catch (URISyntaxException e) {
-			e.printStackTrace();
-			return false;
-		}
-		
-		Desktop desktop = Desktop.getDesktop();
-		try {
-			desktop.mail(uri);
-		} catch (IOException e) {
-			e.printStackTrace();
-			return false;
-		}
-		
-		return true;
+	private static String formatNewlineHTML(String text) {
+		return text.replaceAll("\n(.*?)(?=(\n|$))", "<p style=\"margin-top: 0\">$1</p>");
+	}
+
+	/**
+	 * Makes text HTML unformatted by replacing '<' and '>' by the HTML character equivalent
+	 * @param text text to be replaced
+	 * @return HTML unformatted text
+	 */
+	private static String unformatHTML(String text) {
+		return text.replace("<", "&lt;").replace(">", "&gt;");
 	}
 	
 }
