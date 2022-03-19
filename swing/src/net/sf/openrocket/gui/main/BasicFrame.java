@@ -23,9 +23,12 @@ import java.net.URL;
 import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.EventObject;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
 import javax.swing.Action;
@@ -71,6 +74,7 @@ import org.slf4j.LoggerFactory;
 
 import net.miginfocom.swing.MigLayout;
 import net.sf.openrocket.aerodynamics.AerodynamicCalculator;
+import net.sf.openrocket.aerodynamics.AerodynamicForces;
 import net.sf.openrocket.aerodynamics.BarrowmanCalculator;
 import net.sf.openrocket.aerodynamics.FlightConditions;
 import net.sf.openrocket.aerodynamics.WarningSet;
@@ -108,6 +112,8 @@ import net.sf.openrocket.gui.util.SaveFileWorker;
 import net.sf.openrocket.gui.util.SwingPreferences;
 import net.sf.openrocket.l10n.Translator;
 import net.sf.openrocket.logging.Markers;
+import net.sf.openrocket.masscalc.MassCalculator;
+import net.sf.openrocket.masscalc.RigidBody;
 import net.sf.openrocket.rocketcomponent.ComponentChangeEvent;
 import net.sf.openrocket.rocketcomponent.ComponentChangeListener;
 import net.sf.openrocket.rocketcomponent.FlightConfiguration;
@@ -291,7 +297,6 @@ public class BasicFrame extends JFrame {
 		log.debug("BasicFrame instantiation complete");
 	}
 
-
 	private JComponent NakujaTab() {
 		JSplitPane horizontal = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, true);
 		horizontal.setResizeWeight(0.5);
@@ -307,10 +312,108 @@ public class BasicFrame extends JFrame {
 		WarningSet warnings = new WarningSet();
 		AerodynamicCalculator aerodynamicCalculator; 
 		aerodynamicCalculator = new BarrowmanCalculator();
+		AerodynamicForces a = aerodynamicCalculator.getAerodynamicForces(curConfig, conditions, warnings);
 
 		Coordinate cp = aerodynamicCalculator.getCP(curConfig, conditions, warnings);
+		Coordinate CP = a.getCP();
 		
-		s += cp.toString();
+
+		double CD = a.getCD();
+		double baseCD = a.getBaseCD();
+		double frictionCD = a.getFrictionCD();
+		double pressureCD = a.getPressureCD();
+
+		double Cm = a.getCm();
+		double CN = a.getCN();
+		double CNa = a.getCNa();
+		double yawDampingMoment = a.getYawDampingMoment();
+		double cAxial = a.getCaxial();
+		double cRoll  = a.getCroll();
+		double cRollDamp = a.getCrollDamp();
+		double cRollForce = a.getCrollForce();
+		double cSide = a.getCside();
+		double cYaw = a.getCyaw();
+
+		s += addPropertyString("Cp",cp.toString());
+		s += addPropertyString("CP",CP.toString());
+		s += addDivider();
+
+		s += addPropertyString("CD",String.format("%.6f",CD));
+		s += addPropertyString("Base CD",String.format("%.6f",baseCD));
+		s += addPropertyString("Pressure CD",String.format("%.6f",frictionCD));
+		s += addPropertyString("Friction CD",String.format("%.6f",frictionCD));
+		s += addDivider();
+
+		s += addPropertyString("Cm",String.format("%.6f",Cm));
+		s += addPropertyString("CN",String.format("%.6f",CN));
+		s += addPropertyString("CNa",String.format("%.6f",CNa));
+		s += addPropertyString("Yaw Damping Moment",String.format("%.6f",yawDampingMoment));
+		s += addDivider();
+
+		s += addPropertyString("Caxial",String.format("%.6f",cAxial));
+		s += addPropertyString("Croll",String.format("%.6f",cRoll));
+		s += addPropertyString("CRollDamp",String.format("%.6f",cRollDamp));
+		s += addPropertyString("CRollForce",String.format("%.6f",cRollForce));
+		s += addPropertyString("Cside",String.format("%.6f",cSide));
+		s += addPropertyString("Cyaw",String.format("%.6f",cYaw));
+		s += addDivider();
+		
+		RigidBody corePropInertia = MassCalculator.calculateMotor(curConfig);
+		double ixx = corePropInertia.getIxx();
+		double iyy = corePropInertia.getIyy();
+		double izz = corePropInertia.getIzz();
+		Coordinate centerOfMass = corePropInertia.getCM();
+		double mass = corePropInertia.getMass();
+		s += addPropertyString("Ixx",String.format("%.6f",ixx));
+		s += addPropertyString("Iyy",String.format("%.6f",iyy));
+		s += addPropertyString("Izz",String.format("%.6f",izz));
+		s += addPropertyString("Center of Mass",centerOfMass.toString());
+		s += addPropertyString("Mass",String.format("%.6f",mass));
+		s += addDivider();
+		
+		Collection<RocketComponent> rc = curConfig.getActiveComponents();
+		Iterator<RocketComponent> it = rc.iterator();
+		while (it.hasNext()) {
+			RocketComponent r = it.next();
+			String name = r.getName();
+
+			Coordinate[] compLocs = r.getComponentLocations();
+			Coordinate[] locations = r.getLocations();
+			double axialOffset = r.getAxialOffset();
+			double length = r.getLength();
+			Coordinate pos = r.getPosition();
+
+			Coordinate CG = r.getCG();
+
+			double compMass= r.getComponentMass();
+			double secMass = r.getSectionMass();
+			double overMass = r.getOverrideMass();
+
+			double longI = r.getLongitudinalInertia();
+			double longUI = r.getLongitudinalUnitInertia();
+			double rI = r.getRotationalInertia();
+			double rUI = r.getRotationalUnitInertia();
+
+			s += addPropertyString("name",name);
+			s += addPropertyString("    comp locations",compLocs.toString());
+			s += addPropertyString("    locations",locations.toString());
+			s += addPropertyString("    axialOffset",String.format("%.6f",axialOffset));
+			s += addPropertyString("    length",String.format("%.6f",length));
+			s += addPropertyString("    position",pos.toString());
+			s += addPropertyString("    CG",CG.toString());
+			s += addPropertyString("    component mass",String.format("%.6f",compMass));
+			s += addPropertyString("    section mass",String.format("%.6f",secMass));
+			s += addPropertyString("    override mass",String.format("%.6f",overMass));
+			s += addPropertyString("    Longitudinal I",String.format("%.6f",longI));
+			s += addPropertyString("    Longitudinal Unit I",String.format("%.6f",longUI));
+			s += addPropertyString("    Rotational I",String.format("%.6f",rI));
+			s += addPropertyString("    Rotational Unit I",String.format("%.6f",rUI));
+
+			System.out.println(addDivider());
+		}
+
+		
+		
 
 		textArea.setText(s);
 
@@ -319,6 +422,22 @@ public class BasicFrame extends JFrame {
 		horizontal.setRightComponent(panel);
 
 		return horizontal;
+	}
+
+	private String addDivider() {
+		String s = "***********************\n";
+		return s;
+	}
+	
+	
+	private String addPropertyString(String key, String value) {
+		String s = "";
+		s += key;
+		s += ": ";
+		s += value;
+		s += "\n";
+		return  s;
+		
 	}
 
 	/**
